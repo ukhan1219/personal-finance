@@ -2819,3 +2819,33 @@ A typical iOS flow, bridging all these pieces:
 With this blueprint in hand, you’ll have an end-to-end plan for your basic finance app, including a minimal user interface, authentication, banking integration with Plaid, and a robust backend that can scale. 
 
 Good luck building your finance application! If you get stuck on any specific implementation details, Plaid’s docs and Firebase docs are both great resources, and you can always consult them for troubleshooting tips.
+
+
+backend development:
+Configuration: Implement internal/config to load env vars (PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV=sandbox, PORT=8080, FIREBASE_CREDENTIALS=./serviceAccountKey.json).
+Install Backend Dependencies: cd backend, go get github.com/gin-gonic/gin github.com/joho/godotenv firebase.google.com/go/v4 google.golang.org/api/option github.com/plaid/plaid-go/v21/plaid (adjust plaid version if needed).
+Basic Server & Firebase Init: Update main.go to use Gin, load config, initialize Firebase Admin SDK (auth and firestore clients). Add basic /health endpoint.
+Auth Middleware: Implement internal/api/middleware.go to verify Firebase ID tokens from Authorization: Bearer header using authClient.VerifyIDToken.
+Plaid Client Init: Add Plaid client initialization in internal/config or main.go.
+Plaid API Handlers: Implement handlers in internal/api/handlers.go for:
+POST /api/plaid/create_link_token: Use plaidClient, require auth middleware.
+POST /api/plaid/exchange_public_token: Use plaidClient, require auth middleware. Save encrypted token + itemId + userId to Firestore (internal/database). Define encryption strategy now.
+GET /api/plaid/spending: Require auth middleware. Fetch (decrypted) token from Firestore, call plaidClient.TransactionsGet for relevant date ranges (define logic), calculate sums, return JSON.
+Routes: Define routes in internal/api/routes.go, applying auth middleware where needed.
+Firestore Rules: Update Firestore rules for basic security (e.g., authenticated users can only read/write their own plaidItems).
+
+ios development:
+Add Config & Dependencies:
+Open ios/FinanceApp.xcodeproj.
+Drag GoogleService-Info.plist into the project (ensure added to target).
+Add Swift Packages: firebase-ios-sdk (select FirebaseAuth, FirebaseFirestore, FirebaseFirestoreSwift), plaid-link-ios-spm (select LinkKit).
+Firebase Initialization: Create/update AppDelegate to call FirebaseApp.configure(). Adapt YourAppApp.swift to use UIApplicationDelegateAdaptor.
+Auth Implementation: Create AuthViewModel, LoginView, SignUpView. Integrate FirebaseAuth SDK calls for email/pass & Apple Sign In. Manage auth state (@Published isLoggedIn). Use Keychain for secure token persistence if needed beyond SDK defaults.
+Core UI Structure: Create ContentView to switch between Auth flow and MainAppView based on AuthViewModel.isLoggedIn.
+API Service: Create APIService.swift to handle network calls to your Go backend (fetch link token, exchange public token, fetch spending). Include sending the Firebase ID token in Authorization header.
+Plaid Integration: Create PlaidViewModel, implement fetchLinkToken (calls APIService), setup LinkTokenConfiguration, present Plaid Link using UIViewControllerRepresentable helper, handle onSuccess (send public_token via APIService), handle onExit. Add "Link Bank" button to UI.
+Spending Display: Create SpendingViewModel, implement fetchSpendingData (calls APIService), create SpendingView to display the 3 numbers formatted correctly. Display loading/error states. Trigger fetch onAppear.
+Biometrics: (Optional Enhancement) Add LocalAuthentication check gated by Keychain token presence after app returns from background.
+
+
+
