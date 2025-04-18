@@ -7,26 +7,41 @@
 
 import SwiftUI
 import SwiftData
+import FirebaseCore
 
 @main
 struct GlanceApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    // Register app delegate FOR Firebase setup - This line correctly refers to the AppDelegate class defined in AppDelegate.swift
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    // Create the AuthViewModel as a StateObject
+    @StateObject private var authViewModel = AuthViewModel()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // Conditionally show Login or Main App
+            if authViewModel.isAuthenticated {
+                // Replace with your main authenticated view (e.g., SpendingView or MainTabView)
+                // Example: SpendingView()
+                // Example: MainTabView()
+                VStack { // Use a VStack to place the button
+                    Text("Logged In! (Replace with Main View)") // Placeholder
+
+                    // Add Logout Button
+                    Button("Logout") {
+                        authViewModel.signOut()
+                    }
+                    .padding()
+                    .buttonStyle(.borderedProminent) // Basic styling
+                }
+                     .environmentObject(authViewModel) // Pass down if needed
+                     // Pass other view models here if needed
+                     // .environmentObject(SpendingViewModel(authViewModel: authViewModel))
+                     // .environmentObject(PlaidViewModel(authViewModel: authViewModel))
+            } else {
+                // Show LoginView if not authenticated
+                LoginView()
+                    .environmentObject(authViewModel) // Pass the AuthViewModel
+            }
         }
-        .modelContainer(sharedModelContainer)
     }
 }

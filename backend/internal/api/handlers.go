@@ -61,8 +61,8 @@ func CreateLinkTokenHandler(cfg *config.Config, plaidClient *plaid.APIClient) gi
 		language := "en"
 		// Add a placeholder redirect URI (even if just for sandbox/testing initially)
 		// IMPORTANT: Also add this exact URI to your Plaid Dashboard API settings
-		redirectUri := "http://localhost:3000/oauth-callback" // Example, adjust if needed
-
+		// redirectUri := "http://localhost:3000/oauth-callback" // Example, adjust if needed
+		redirectUri := "https://usmankhan.dev/plaid-oauth/"
 		linkTokenCreateRequest := plaid.NewLinkTokenCreateRequest(
 			clientName,
 			language,
@@ -103,7 +103,7 @@ func CreateLinkTokenHandler(cfg *config.Config, plaidClient *plaid.APIClient) gi
 // Returns:
 //
 //	gin.HandlerFunc: The Gin handler function.
-func ExchangePublicTokenHandler(cfg *config.Config, plaidClient *plaid.APIClient, firestoreClient *firestore.Client) gin.HandlerFunc {
+func ExchangePublicTokenHandler(cfg *config.Config, plaidClient *plaid.APIClient, dbService *database.DatabaseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 1. Get User ID from context
 		firebaseUser, exists := GetUserFromContext(c)
@@ -135,13 +135,15 @@ func ExchangePublicTokenHandler(cfg *config.Config, plaidClient *plaid.APIClient
 		accessToken := resp.GetAccessToken()
 		itemID := resp.GetItemId()
 
-		// 4. Store Access Token and Item ID in Firestore (TODO: Encrypt access token)
-		// This requires a function in the database package.
-		err = database.StorePlaidItem(ctx, firestoreClient, userID, itemID, accessToken) // Placeholder function
+		// 4. Store Access Token and Item ID using DatabaseService method
+		log.Infof("Storing item details (Item ID: %s) for user %s", itemID, userID)
+		err = dbService.StorePlaidItem(ctx, userID, itemID, accessToken) // Use dbService method
 		if err != nil {
+			log.Errorf("Failed to store Plaid item details for user %s, item %s: %v", userID, itemID, err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to save account connection details"})
 			return
 		}
+		log.Infof("Successfully stored item details for user %s, item %s", userID, itemID)
 
 		// 5. Return Success
 		c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Account connected successfully"})
@@ -153,7 +155,7 @@ func ExchangePublicTokenHandler(cfg *config.Config, plaidClient *plaid.APIClient
 // Returns:
 //
 //	gin.HandlerFunc: The Gin handler function.
-func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, firestoreClient *firestore.Client) gin.HandlerFunc {
+func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, dbService *database.DatabaseService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 1. Get User ID from context
 		firebaseUser, exists := GetUserFromContext(c)
@@ -163,10 +165,10 @@ func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, firest
 		}
 		userID := firebaseUser.UID
 
-		// 2. Get User's Plaid Access Tokens from Firestore
-		// This requires a function in the database package.
-		accessTokens, err := database.GetUserAccessTokens(c.Request.Context(), firestoreClient, userID) // Placeholder function
+		// 2. Get User's Plaid Access Tokens using DatabaseService method
+		accessTokens, err := dbService.GetUserAccessTokens(c.Request.Context(), userID) // Use dbService method
 		if err != nil {
+			log.Errorf("Failed to retrieve access tokens for user %s: %v", userID, err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not retrieve account connection details"})
 			return
 		}

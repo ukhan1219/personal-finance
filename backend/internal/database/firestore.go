@@ -6,15 +6,16 @@
 package database
 
 import (
-	"context"
-	"encoding/base64" // Using Base64 as a TEMPORARY placeholder for "encryption"
+	"context" // Needed for decoding the key from config
 	"fmt"
 	"time"
 
 	"cloud.google.com/go/firestore"
-	firebase "firebase.google.com/go/v4" // Add firebase import
+	firebase "firebase.google.com/go/v4"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/api/iterator" // Required for iterating through documents
+	"google.golang.org/api/iterator"
+
+	"github.com/ukhan1219/glance/backend/internal/encryption" // Import encryption package
 )
 
 // plaidItemsCollection defines the name of the Firestore collection used to store Plaid item data.
@@ -25,12 +26,39 @@ type PlaidItem struct {
 	UserID               string    `firestore:"userId"`      // Matches the Firebase Auth UID
 	EncryptedAccessToken string    `firestore:"accessToken"` // Store the encrypted token
 	CreatedAt            time.Time `firestore:"createdAt"`
-	// Add other fields if needed, e.g., InstitutionID, InstitutionName
 }
 
-// --- Firestore Initialization ---
+// DatabaseService encapsulates Firestore client and encryption key.
+type DatabaseService struct {
+	client        *firestore.Client
+	encryptionKey []byte // Store the raw key bytes
+}
 
-// InitializeFirestoreClient initializes the Firestore client from a Firebase App instance.
+// --- Initialization ---
+
+// NewDatabaseService creates a new service instance with Firestore client and decoded encryption key.
+// It also initializes the Firestore client itself from the Firebase App.
+//
+// Args:
+//
+//	ctx (context.Context): The context for initialization.
+//	app (*firebase.App): The initialized Firebase App instance.
+//	encryptionKey ([]byte): The raw encryption key bytes.
+//
+// Returns:
+//
+//	(*DatabaseService, error): The database service instance or an error.
+func NewDatabaseService(client *firestore.Client, encryptionKey []byte) (*DatabaseService, error) {
+	if len(encryptionKey) != 32 {
+		return nil, fmt.Errorf("invalid encryption key length: expected 32 bytes, got %d", len(encryptionKey))
+	}
+	return &DatabaseService{
+		client:        client,
+		encryptionKey: encryptionKey,
+	}, nil
+}
+
+// InitializeFirestoreClient creates and returns a Firestore client from a Firebase App instance.
 //
 // Args:
 //
@@ -44,67 +72,48 @@ func InitializeFirestoreClient(ctx context.Context, app *firebase.App) (*firesto
 	log.Info("Attempting to initialize Firestore client...")
 	firestoreClient, err := app.Firestore(ctx)
 	if err != nil {
-		log.Errorf("Failed to get Firestore client: %v", err) // Use Errorf, not Fatalf
+		log.Errorf("Failed to get Firestore client: %v", err)
 		return nil, fmt.Errorf("failed to initialize Firestore client: %w", err)
 	}
-	log.Info("Firestore client obtained successfully.")
+	log.Info("Firestore client initialized successfully.")
 	return firestoreClient, nil
 }
 
-// --- Encryption Placeholder ---
-// WARNING: Base64 is NOT real encryption. It's just encoding.
-// This is a placeholder and MUST be replaced with a proper encryption mechanism
-// (like AES-GCM with a key managed by KMS or environment variable) before production.
+// --- Firestore Operations (Methods on DatabaseService) ---
 
-// encryptTokenPlaceholder encodes the token using Base64. Replace with real encryption.
-func encryptTokenPlaceholder(token string) string {
-	return base64.StdEncoding.EncodeToString([]byte(token))
-}
-
-// decryptTokenPlaceholder decodes the token from Base64. Replace with real decryption.
-func decryptTokenPlaceholder(encodedToken string) (string, error) {
-	decodedBytes, err := base64.StdEncoding.DecodeString(encodedToken)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode base64 token: %w", err)
-	}
-	return string(decodedBytes), nil
-}
-
-// --- Firestore Operations ---
-
-// StorePlaidItem saves Plaid item details (access token, item ID) for a user in Firestore.
-// It uses a placeholder for access token encryption.
+// StorePlaidItem saves Plaid item details for a user in Firestore, encrypting the access token.
 //
 // Args:
 //
 //	ctx (context.Context): The context for the Firestore operation.
-//	client (*firestore.Client): The Firestore client instance.
 //	userID (string): The Firebase Authentication UID of the user.
 //	itemID (string): The Plaid Item ID, used as the document ID.
-//	accessToken (string): The raw Plaid access token (will be "encrypted").
+//	accessToken (string): The raw Plaid access token to be encrypted.
 //
 // Returns:
 //
 //	error: An error if the operation fails, otherwise nil.
-func StorePlaidItem(ctx context.Context, client *firestore.Client, userID, itemID, accessToken string) error {
+func (s *DatabaseService) StorePlaidItem(ctx context.Context, userID, itemID, accessToken string) error {
 	logFields := log.Fields{"userID": userID, "itemID": itemID}
 	log.WithFields(logFields).Info("Storing Plaid item details in Firestore...")
 
-	// --- !!! WARNING: Placeholder Encryption !!! ---
-	encryptedToken := encryptTokenPlaceholder(accessToken)
-	log.WithFields(logFields).Warn("Using placeholder (Base64) for access token storage. REPLACE WITH REAL ENCRYPTION.")
-	// --- End Warning ---
+	// Encrypt the access token using the service's key
+	encryptedToken, err := encryption.Encrypt(accessToken, s.encryptionKey)
+	if err != nil {
+		log.WithFields(logFields).Errorf("Failed to encrypt access token: %v", err)
+		return fmt.Errorf("failed to prepare item data for storage: %w", err)
+	}
+	log.WithFields(logFields).Debug("Access token encrypted.")
 
 	itemData := PlaidItem{
 		UserID:               userID,
 		EncryptedAccessToken: encryptedToken,
-		CreatedAt:            time.Now().UTC(), // Use UTC time
+		CreatedAt:            time.Now().UTC(),
 	}
 
-	// Use itemID as the document ID in the plaidItems collection
-	docRef := client.Collection(plaidItemsCollection).Doc(itemID)
+	docRef := s.client.Collection(plaidItemsCollection).Doc(itemID)
 
-	_, err := docRef.Set(ctx, itemData)
+	_, err = docRef.Set(ctx, itemData)
 	if err != nil {
 		log.WithFields(logFields).Errorf("Failed to set Plaid item document in Firestore: %v", err)
 		return fmt.Errorf("failed to store plaid item: %w", err)
@@ -114,32 +123,29 @@ func StorePlaidItem(ctx context.Context, client *firestore.Client, userID, itemI
 	return nil
 }
 
-// GetUserAccessTokens retrieves all Plaid access tokens associated with a user ID from Firestore.
-// It uses a placeholder for access token decryption.
+// GetUserAccessTokens retrieves and decrypts all Plaid access tokens for a user ID from Firestore.
 //
 // Args:
 //
 //	ctx (context.Context): The context for the Firestore operation.
-//	client (*firestore.Client): The Firestore client instance.
 //	userID (string): The Firebase Authentication UID of the user.
 //
 // Returns:
 //
 //	([]string, error): A slice of decrypted access tokens and an error if retrieval fails.
-func GetUserAccessTokens(ctx context.Context, client *firestore.Client, userID string) ([]string, error) {
+func (s *DatabaseService) GetUserAccessTokens(ctx context.Context, userID string) ([]string, error) {
 	logFields := log.Fields{"userID": userID}
 	log.WithFields(logFields).Info("Retrieving Plaid access tokens from Firestore...")
 
 	var tokens []string
-	// Query the plaidItems collection for documents where the userId field matches the user's ID
-	iter := client.Collection(plaidItemsCollection).Where("userId", "==", userID).Documents(ctx)
-	defer iter.Stop() // Ensure the iterator is always stopped
+	iter := s.client.Collection(plaidItemsCollection).Where("userId", "==", userID).Documents(ctx)
+	defer iter.Stop()
 
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
 			log.WithFields(logFields).Infof("Finished iterating through Plaid items. Found %d token(s).", len(tokens))
-			break // No more documents
+			break
 		}
 		if err != nil {
 			log.WithFields(logFields).Errorf("Failed during iteration of Plaid items: %v", err)
@@ -149,26 +155,37 @@ func GetUserAccessTokens(ctx context.Context, client *firestore.Client, userID s
 		var item PlaidItem
 		if err := doc.DataTo(&item); err != nil {
 			log.WithFields(logFields).Warnf("Failed to parse Plaid item document %s: %v", doc.Ref.ID, err)
-			continue // Skip this document if parsing fails
-		}
-
-		// --- !!! WARNING: Placeholder Decryption !!! ---
-		log.WithFields(logFields).Warn("Using placeholder (Base64) for access token retrieval. REPLACE WITH REAL DECRYPTION.")
-		decryptedToken, err := decryptTokenPlaceholder(item.EncryptedAccessToken)
-		if err != nil {
-			log.WithFields(logFields).Errorf("Failed to decrypt token for item %s: %v", doc.Ref.ID, err)
-			// Decide how to handle decryption failure - skip token or return overall error?
-			// Skipping for now.
 			continue
 		}
-		// --- End Warning ---
 
-		tokens = append(tokens, decryptedToken)
+		// Decrypt the token using the service's key
+		decryptedToken, err := encryption.Decrypt(item.EncryptedAccessToken, s.encryptionKey)
+		if err != nil {
+			log.WithFields(logFields).Errorf("Failed to decrypt token for item %s: %v", doc.Ref.ID, err)
+			// Depending on policy, you might want to return an error here instead of just skipping.
+			continue
+		}
 		log.WithFields(logFields).Debugf("Successfully retrieved and decrypted token for item %s", doc.Ref.ID)
+		tokens = append(tokens, decryptedToken)
 	}
 
 	return tokens, nil
 }
 
-// TODO: Implement EncryptTokenFunction and DecryptTokenFunction using a secure method
-// (e.g., Google Cloud KMS, AES-GCM with key from env/secrets manager).
+// CloseFirestore closes the underlying Firestore client connection.
+// Should be called during graceful server shutdown.
+func (s *DatabaseService) CloseFirestore(ctx context.Context) error {
+	log.Info("Attempting to close Firestore client connection via DatabaseService...")
+	if s.client == nil {
+		log.Warn("Firestore client was already nil, cannot close.")
+		return nil
+	}
+	err := s.client.Close()
+	if err != nil {
+		log.Errorf("Error closing Firestore client: %v", err)
+		return err
+	}
+	log.Info("Firestore client connection closed.")
+	s.client = nil // Prevent double closing
+	return nil
+}

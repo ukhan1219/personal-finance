@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64" // Import base64
 	"fmt"
 
 	// Remove direct import of firestore client type, it's handled in database package
@@ -66,6 +67,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
+	// Decode encryption key early (already validated in config.Load)
+	encryptionKeyBytes, _ := base64.StdEncoding.DecodeString(cfg.PlaidTokenEncryptionKey)
 
 	// --- Initialize Firebase App ---
 	ctx := context.Background()
@@ -82,19 +85,26 @@ func main() {
 		log.Fatalf("Failed to initialize Firebase Auth client.")
 	}
 
-	// Initialize Firestore Client using the database package function
+	// Initialize Firestore client first
 	firestoreClient, err := database.InitializeFirestoreClient(ctx, firebaseApp)
 	if err != nil {
-		// Error is already logged in initFirestore
-		log.Fatalf("Failed to initialize Firestore client.")
+		log.Fatalf("Failed to initialize Firestore client: %v", err)
 	}
-	// Ensure Firestore client is closed gracefully on shutdown
+
+	// Then create database service
+	dbService, err := database.NewDatabaseService(firestoreClient, encryptionKeyBytes)
+	if err != nil {
+		log.Fatalf("Failed to initialize Database service: %v", err)
+	}
+	// Ensure Firestore client within dbService is closed gracefully
 	defer func() {
-		log.Info("Closing Firestore client...")
-		if err := firestoreClient.Close(); err != nil {
-			log.Errorf("Error closing Firestore client: %v", err)
-		} else {
-			log.Info("Firestore client closed successfully.")
+		if dbService != nil {
+			log.Info("Closing Firestore client via DatabaseService...")
+			if err := dbService.CloseFirestore(ctx); err != nil { // Use context here
+				log.Errorf("Error closing Firestore client: %v", err)
+			} else {
+				log.Info("Firestore client closed successfully.")
+			}
 		}
 	}()
 
@@ -113,9 +123,9 @@ func main() {
 	// TODO: Setup additional general Middleware (CORS?) later if needed.
 
 	// --- Setup API Routes ---
-	// Pass the initialized clients to the route setup function
-	api.SetupRoutes(router, cfg, authClient, firestoreClient, plaidClient)
-	log.Info("API routes setup complete.")
+	// Pass the initialized clients and services to the route setup function
+	api.SetupRoutes(router, cfg, authClient, dbService, plaidClient) // Pass dbService
+	log.Info("API routes setup.")
 
 	// --- Start Server ---
 	serverAddr := ":" + cfg.Port

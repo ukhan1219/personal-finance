@@ -8,12 +8,12 @@ package api
 import (
 	"net/http"
 
-	"cloud.google.com/go/firestore"
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/plaid/plaid-go/v32/plaid"
 	log "github.com/sirupsen/logrus"
 	"github.com/ukhan1219/glance/backend/internal/config"
+	"github.com/ukhan1219/glance/backend/internal/database"
 )
 
 // SetupRoutes configures the Gin engine with all application routes.
@@ -24,13 +24,13 @@ import (
 //	router (*gin.Engine): The Gin engine instance.
 //	cfg (*config.Config): The application configuration.
 //	authClient (*auth.Client): The Firebase Auth client.
-//	firestoreClient (*firestore.Client): The Firestore client.
+//	dbService (*database.DatabaseService): The database service instance.
 //	plaidClient (*plaid.APIClient): The Plaid API client.
 func SetupRoutes(
 	router *gin.Engine,
 	cfg *config.Config,
 	authClient *auth.Client,
-	firestoreClient *firestore.Client,
+	dbService *database.DatabaseService,
 	plaidClient *plaid.APIClient,
 ) {
 	log.Info("Setting up API routes...")
@@ -53,8 +53,8 @@ func SetupRoutes(
 		log.Info("Setting up /api/v1/plaid routes...")
 		// Use the actual handlers from handlers.go
 		plaidGroup.POST("/create_link_token", CreateLinkTokenHandler(cfg, plaidClient))
-		plaidGroup.POST("/exchange_public_token", ExchangePublicTokenHandler(cfg, plaidClient, firestoreClient))
-		plaidGroup.GET("/spending", GetSpendingHandler(cfg, plaidClient, firestoreClient))
+		plaidGroup.POST("/exchange_public_token", ExchangePublicTokenHandler(cfg, plaidClient, dbService))
+		plaidGroup.GET("/spending", GetSpendingHandler(cfg, plaidClient, dbService))
 		// Add more Plaid-related routes here if needed
 	}
 

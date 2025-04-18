@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64" // Import base64
 	"fmt"
 	"os"
 	"strconv"
@@ -11,11 +12,12 @@ import (
 
 // Config holds application configuration values loaded from the environment.
 type Config struct {
-	Port                string
-	PlaidClientID       string
-	PlaidSecret         string
-	PlaidEnv            string // e.g., "sandbox", "development", "production"
-	FirebaseCredentials string // Path to Firebase service account key
+	Port                    string
+	PlaidClientID           string
+	PlaidSecret             string
+	PlaidEnv                string // e.g., "sandbox", "development", "production"
+	FirebaseCredentials     string // Path to Firebase service account key
+	PlaidTokenEncryptionKey string // Base64 encoded AES-256 key (32 bytes raw)
 	// Add other config fields as needed, e.g., JWT secret, encryption keys
 }
 
@@ -36,12 +38,13 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{}
-	requiredVars := map[string]*string{
-		"PORT":                 &cfg.Port,
-		"PLAID_CLIENT_ID":      &cfg.PlaidClientID,
-		"PLAID_SECRET":         &cfg.PlaidSecret,
-		"PLAID_ENV":            &cfg.PlaidEnv,
-		"FIREBASE_CREDENTIALS": &cfg.FirebaseCredentials,
+	requiredVars := map[string]*string{ // Use double pointer for map value
+		"PORT":                       &cfg.Port,
+		"PLAID_CLIENT_ID":            &cfg.PlaidClientID,
+		"PLAID_SECRET":               &cfg.PlaidSecret,
+		"PLAID_ENV":                  &cfg.PlaidEnv,
+		"FIREBASE_CREDENTIALS":       &cfg.FirebaseCredentials,
+		"PLAID_TOKEN_ENCRYPTION_KEY": &cfg.PlaidTokenEncryptionKey, // Add key loading
 	}
 
 	// Load required variables
@@ -52,7 +55,7 @@ func Load() (*Config, error) {
 			log.Error(errMsg)
 			return nil, fmt.Errorf(errMsg)
 		}
-		*pointer = value
+		*pointer = value                     // Assign address of value
 		log.Debugf("Loaded env var %s", key) // Don't log secrets in production
 	}
 
@@ -74,6 +77,20 @@ func Load() (*Config, error) {
 		log.Error(errMsg)
 		return nil, fmt.Errorf(errMsg)
 	}
+
+	// Validate Encryption Key (Base64 encoded, must decode to 32 bytes for AES-256)
+	keyBytes, err := base64.StdEncoding.DecodeString(cfg.PlaidTokenEncryptionKey)
+	if err != nil {
+		errMsg := fmt.Sprintf("Invalid PLAID_TOKEN_ENCRYPTION_KEY: Failed to decode base64: %v", err)
+		log.Error(errMsg)
+		return nil, fmt.Errorf(errMsg)
+	}
+	if len(keyBytes) != 32 {
+		errMsg := fmt.Sprintf("Invalid PLAID_TOKEN_ENCRYPTION_KEY: Decoded key must be 32 bytes for AES-256, got %d bytes", len(keyBytes))
+		log.Error(errMsg)
+		return nil, fmt.Errorf(errMsg)
+	}
+	log.Info("Plaid token encryption key loaded and validated.")
 
 	log.Infof("Configuration loaded successfully. Port: %s, Plaid Env: %s", cfg.Port, cfg.PlaidEnv)
 
