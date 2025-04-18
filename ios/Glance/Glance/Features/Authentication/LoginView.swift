@@ -90,7 +90,7 @@ struct LoginView: View {
                     }
                     .padding(.bottom, 16) // Bottom padding from Figma
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 32)
                  // Add the navigationDestination modifier here
                  .navigationDestination(isPresented: $navigateToSignup) {
                      SignupView() // Destination view
@@ -113,8 +113,9 @@ struct LoginView: View {
                     authViewModel.signInWithGoogle()
                 }
                 SocialButton(iconName: "apple-logo", text: "Continue with Apple") {
-                    // TODO: Implement Apple Sign In
-                    print("Apple Sign In tapped")
+                    // Call the startSignInWithAppleFlow method from the ViewModel
+                    print("Apple Sign In tapped - initiating flow")
+                    authViewModel.startSignInWithAppleFlow()
                 }
             }
 

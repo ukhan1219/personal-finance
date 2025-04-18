@@ -83,7 +83,7 @@ struct SignupView: View {
 
                  // (Commented out login link remains outside the centered block if added back)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 32)
         }
         .navigationBarBackButtonHidden(true)
         .toolbar { // The toolbar exists visually outside the VStack's layout bounds

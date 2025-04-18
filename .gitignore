@@ -2,3 +2,4 @@ backend/.env
 backend/serviceAccountKey.json
 
 get_token.html
+teamid.txt
