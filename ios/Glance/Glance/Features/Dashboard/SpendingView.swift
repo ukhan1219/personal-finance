@@ -18,9 +18,15 @@ struct SpendingView: View {
                 // --- Spending Display ---
                 if viewModel.isLoading && viewModel.spendingSummary == nil {
                     // Initial loading state
-                    ProgressView("Loading Spending...")
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    VStack {
+                         ProgressView()
+                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                         Text("Loading Spending...")
+                             .font(.custom("Manrope-Bold", size: 14)) // Use Manrope
+                             .foregroundColor(.secondaryText)
+                             .padding(.top, 8)
+                     }
+                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let summary = viewModel.spendingSummary {
                     // Data available state
                     VStack(alignment: .leading, spacing: 8) { // Adjust spacing as needed
@@ -45,7 +51,7 @@ struct SpendingView: View {
                          }.padding(.bottom)
                      } else if let error = viewModel.errorMessage {
                          Text(error)
-                             .font(.caption)
+                             .font(.custom("Manrope-Bold", size: 12)) // Use Manrope
                              .foregroundColor(.red)
                              .frame(maxWidth: .infinity, alignment: .center)
                              .padding()
@@ -68,8 +74,10 @@ struct SpendingView: View {
                      VStack {
                         Spacer()
                         Text("Error loading spending data:")
+                            .font(.custom("Manrope-Bold", size: 14)) // Use Manrope
                             .foregroundColor(.secondaryText)
                         Text(error)
+                            .font(.custom("Manrope-Bold", size: 12)) // Use Manrope
                             .foregroundColor(.red)
                             .multilineTextAlignment(.center)
                         Spacer()
@@ -77,6 +85,7 @@ struct SpendingView: View {
                 } else {
                      // Fallback for unexpected state (shouldn't normally happen)
                      Text("No spending data available.")
+                        .font(.custom("Manrope-Bold", size: 14)) // Use Manrope
                         .foregroundColor(.secondaryText)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -99,15 +108,15 @@ struct SpendingRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 2) { // Align text baselines
             Text("$")
-                .font(.custom("Onest-Bold", size: 32)) // Match amount size
+                .font(.custom("Manrope-Bold", size: 32)) // Use Manrope
                 .foregroundColor(labelGray)
 
             Text(amountString)
-                .font(.custom("Onest-Bold", size: 48))
+                .font(.custom("Manrope-Bold", size: 48)) // Use Manrope
                 .foregroundStyle(GradientConstants.titleGradient)
 
             Text(label)
-                .font(.custom("Onest-Bold", size: 32)) // Match amount size
+                .font(.custom("Manrope-Bold", size: 32)) // Use Manrope
                 .foregroundColor(labelGray)
                 .padding(.leading, 4) // Add small space before label
         }

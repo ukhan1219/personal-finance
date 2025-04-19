@@ -28,18 +28,13 @@ struct PlaidConnectView: View {
                 .padding(.bottom, 32)
 
                 // --- Loading Indicator --- (Shown while PlaidVM is loading)
-                if plaidViewModel.isLoading {
-                    ProgressView("Connecting...")
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.bottom, 16)
-                } else {
+                
                     // --- Connect Button --- (Shown when not loading)
                     PrimaryButton(title: "Connect bank account") {
                         connectBankAccountAction()
                     }
                     .padding(.bottom, 16)
-                }
+
 
                 // --- Error Message Display --- (Shown if PlaidVM has an error)
                 if let errorMessage = plaidViewModel.errorMessage {
