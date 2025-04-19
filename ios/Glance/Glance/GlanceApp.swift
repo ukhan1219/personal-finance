@@ -11,45 +11,70 @@ import FirebaseCore
 
 @main
 struct GlanceApp: App {
-    // Register app delegate FOR Firebase setup - This line correctly refers to the AppDelegate class defined in AppDelegate.swift
+    // Register app delegate FOR Firebase setup
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    // Create the AuthViewModel as a StateObject
-    @StateObject private var authViewModel = AuthViewModel()
-    // Create other potential global ViewModels if needed
-    // @StateObject private var plaidViewModel = PlaidViewModel() // Initialize if needed globally
+    // Create ViewModels as StateObjects
+    @StateObject private var authViewModel: AuthViewModel
+    @StateObject private var plaidViewModel: PlaidViewModel
+    @StateObject private var spendingViewModel: SpendingViewModel
+    // Create the APIService (will be initialized in init)
+    @State private var apiService: APIService!
+
+    init() {
+        // Configure Firebase FIRST
+        FirebaseApp.configure()
+        print("GlanceApp Init: Firebase Configured.")
+
+        // --- Dependency Creation --- Create in order needed
+        // 1. AuthViewModel (no dependencies needed for init)
+        let authVM = AuthViewModel()
+        _authViewModel = StateObject(wrappedValue: authVM)
+
+        // 2. APIService (needs AuthViewModel)
+        let apiSvc = APIService(authViewModel: authVM)
+        _apiService = State(initialValue: apiSvc)
+
+        // 3. Inject APIService into AuthViewModel (for getIDToken)
+        authVM.setupAPIService(apiService: apiSvc)
+
+        // 4. PlaidViewModel (needs APIService, AuthViewModel)
+        _plaidViewModel = StateObject(wrappedValue: PlaidViewModel(apiService: apiSvc, authViewModel: authVM))
+
+        // 5. SpendingViewModel (needs APIService)
+        _spendingViewModel = StateObject(wrappedValue: SpendingViewModel(apiService: apiSvc))
+
+        print("GlanceApp Init: ViewModels and Services Initialized.")
+    }
 
     var body: some Scene {
         WindowGroup {
-            // Main view logic
-            if authViewModel.isAuthenticated {
-                // User is logged in, now check if Plaid connection is needed
-                if authViewModel.needsPlaidConnection {
-                    // Show the Plaid Connection prompt view
+            // Use a Group to manage the view hierarchy based on auth and status
+            Group {
+                if !authViewModel.isAuthenticated {
+                    // --- User Not Logged In ---
+                    LoginView()
+                } else if authViewModel.isCheckingStatus {
+                    // --- Checking Plaid Status ---
+                    // TODO: Replace with a nicer LoadingView
+                    ProgressView("Checking account status...")
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.appBackground.ignoresSafeArea())
+                } else if !authViewModel.hasConnectedBankAccount {
+                    // --- Logged In, Needs Plaid Connection ---
                     PlaidConnectView()
-                        .environmentObject(authViewModel) // Pass AuthViewModel
-                        // Pass PlaidViewModel if the button needs it directly
-                        // .environmentObject(plaidViewModel)
+                        .environmentObject(plaidViewModel)
                 } else {
-                    // Show the main dashboard/spending view
-                    // Replace this VStack with your actual main content view (e.g., SpendingView or MainTabView)
-                    VStack {
-                        Text("Main Dashboard (Plaid Connected)") // Placeholder
-                        // Add Logout Button (or move to a profile screen)
-                        Button("Logout") {
-                            authViewModel.signOut()
-                        }
-                        .padding()
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .environmentObject(authViewModel) // Pass AuthViewModel if needed
-                    // Pass other ViewModels as needed
-                    // .environmentObject(SpendingViewModel(authViewModel: authViewModel))
+                    // --- Logged In, Plaid Connected ---
+                    SpendingView()
+                        // Provide SpendingViewModel to the SpendingView
+                        .environmentObject(spendingViewModel)
                 }
-            } else {
-                // Show LoginView if not authenticated
-                LoginView()
-                    .environmentObject(authViewModel) // Pass the AuthViewModel
             }
+            // Provide AuthViewModel to all views that might need it
+            .environmentObject(authViewModel)
+            // Provide apiService if needed directly (less common)
+            // .environment(apiService)
         }
     }
 }

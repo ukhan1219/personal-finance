@@ -18,8 +18,9 @@ import (
 	"github.com/ukhan1219/glance/backend/internal/encryption" // Import encryption package
 )
 
-// plaidItemsCollection defines the name of the Firestore collection used to store Plaid item data.
-const plaidItemsCollection = "plaidItems"
+// PlaidItemsCollectionName defines the name of the Firestore collection used to store Plaid item data.
+// Exported constant for use in other packages like api handlers.
+const PlaidItemsCollectionName = "plaidItems"
 
 // PlaidItem represents the structure of data stored for a Plaid item in Firestore.
 type PlaidItem struct {
@@ -111,7 +112,7 @@ func (s *DatabaseService) StorePlaidItem(ctx context.Context, userID, itemID, ac
 		CreatedAt:            time.Now().UTC(),
 	}
 
-	docRef := s.client.Collection(plaidItemsCollection).Doc(itemID)
+	docRef := s.client.Collection(PlaidItemsCollectionName).Doc(itemID)
 
 	_, err = docRef.Set(ctx, itemData)
 	if err != nil {
@@ -138,7 +139,7 @@ func (s *DatabaseService) GetUserAccessTokens(ctx context.Context, userID string
 	log.WithFields(logFields).Info("Retrieving Plaid access tokens from Firestore...")
 
 	var tokens []string
-	iter := s.client.Collection(plaidItemsCollection).Where("userId", "==", userID).Documents(ctx)
+	iter := s.client.Collection(PlaidItemsCollectionName).Where("userId", "==", userID).Documents(ctx)
 	defer iter.Stop()
 
 	for {
@@ -188,4 +189,10 @@ func (s *DatabaseService) CloseFirestore(ctx context.Context) error {
 	log.Info("Firestore client connection closed.")
 	s.client = nil // Prevent double closing
 	return nil
+}
+
+// GetFirestoreClient returns the underlying Firestore client instance.
+// This might be needed by handlers for specific queries not covered by service methods.
+func (s *DatabaseService) GetFirestoreClient() *firestore.Client {
+	return s.client
 }

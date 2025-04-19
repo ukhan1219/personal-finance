@@ -9,21 +9,59 @@ import CryptoKit
 import AuthenticationServices
 
 class AuthViewModel: NSObject, ObservableObject {
+    // MARK: - Published Properties
     @Published var user: User? // Firebase User object
     @Published var isAuthenticated: Bool = false
     @Published var errorMessage: String?
-    @Published var isLoading: Bool = false // To show loading indicators
-    @Published var needsPlaidConnection: Bool = true // Assume connection needed initially, adjust logic later
+    @Published var isLoading: Bool = false // General loading state
+    @Published var isCheckingStatus: Bool = false // Specific state for status check
+    @Published var hasConnectedBankAccount: Bool = false // The status flag
+    @Published var passwordResetSent: Bool = false // Add a published property to signal success for showing an alert
 
+    // MARK: - Private Properties
     private var authStateHandler: AuthStateDidChangeListenerHandle?
     private var currentNonce: String?
+    private let userDefaults = UserDefaults.standard // For caching
+    private let userDefaultsStatusKey = "hasConnectedBankAccount" // UserDefaults key
 
+    // Dependency: APIService (Injected)
+    private var apiService: APIService!
+
+    // MARK: - Initializer & Setup
     override init() {
         super.init()
-        registerAuthStateHandler()
-        // Set initial state based on current user
+        // Initial state from Firebase Auth
         self.user = Auth.auth().currentUser
         self.isAuthenticated = (self.user != nil)
+
+        // Initial state from cache (only if authenticated initially)
+        if self.isAuthenticated {
+            self.hasConnectedBankAccount = userDefaults.bool(forKey: userDefaultsStatusKey)
+            print("AuthViewModel Init: Initial cached status read = \(self.hasConnectedBankAccount)")
+        } else {
+            print("AuthViewModel Init: User not authenticated, initial status defaults to false.")
+        }
+
+        // APIService is now injected via setupAPIService()
+        // self.apiService = APIService(authViewModel: self) // <-- REMOVE THIS
+
+        registerAuthStateHandler()
+
+        // Status check will be triggered by setupAPIService or registerAuthStateHandler
+        // if self.isAuthenticated {
+        //     checkUserStatus()
+        // }
+    }
+
+    // Method for proper injection (call this after AuthViewModel is created)
+    func setupAPIService(apiService: APIService) {
+        print("AuthViewModel: Setting up APIService...")
+        self.apiService = apiService
+        // Now that APIService is set up, check status if needed
+        if self.isAuthenticated {
+            print("AuthViewModel: APIService setup, triggering initial status check.")
+            checkUserStatus()
+        }
     }
 
     deinit {
@@ -42,42 +80,101 @@ class AuthViewModel: NSObject, ObservableObject {
         authStateHandler = Auth.auth().addStateDidChangeListener { [weak self] (auth, user) in
             DispatchQueue.main.async { // Ensure UI updates are on main thread
                 guard let self = self else { return }
-                _ = self.user // Store old user for comparison
-                self.user = user
                 let wasAuthenticated = self.isAuthenticated
+                self.user = user
                 self.isAuthenticated = (user != nil)
 
-                // Enhanced Logging for Auth State Change
-                if let currentUser = user {
-                    print("Auth State Changed: User is SIGNED IN - UID: \(currentUser.uid)")
+                if user != nil {
+                    print("Auth State Changed: SIGNED IN (UID: \(user!.uid))")
                     if !wasAuthenticated {
-                        print("   -> Event: User just logged in.")
-                        // You would typically fetch user-specific data here using currentUser.uid
-                        currentUser.getIDToken { idToken, error in
-                            if let error = error {
-                                print("   -> Error fetching Firebase ID token: \(error.localizedDescription)")
-                                return
-                            }
-                            if let idToken = idToken {
-                                print("   -> Firebase ID Token: \(idToken)")
-                                // You can now use this idToken to send to your backend for Plaid integration
-                            }
-                        }
+                        print("   -> Event: User just logged in. Triggering status check.")
+                        self.checkUserStatus() // Check status on new login
                     }
                 } else {
-                    print("Auth State Changed: User is SIGNED OUT.")
+                    print("Auth State Changed: SIGNED OUT.")
                     if wasAuthenticated {
-                         print("   -> Event: User just logged out.")
-                         // You would typically clear user-specific data here
+                        print("   -> Event: User just logged out. Clearing status cache.")
+                        // Reset status on logout
+                        self.hasConnectedBankAccount = false
+                        self.userDefaults.removeObject(forKey: self.userDefaultsStatusKey)
                     }
                 }
+            }
+        }
+    }
 
-                // Original logic for state change events
-                if !self.isAuthenticated && wasAuthenticated {
-                    // User just logged out
-                } else if self.isAuthenticated && !wasAuthenticated {
-                    // User just logged in
+    // MARK: - User Status Check
+
+    func checkUserStatus() {
+        guard isAuthenticated else {
+            print("checkUserStatus: Not checking status, user not authenticated.")
+            return
+        }
+
+        // 1. Read from UserDefaults immediately (redundant if done in init/handler, but safe)
+        let cachedStatus = userDefaults.bool(forKey: userDefaultsStatusKey)
+        print("checkUserStatus: Read cached status = \(cachedStatus)")
+        if self.hasConnectedBankAccount != cachedStatus {
+             print("checkUserStatus: Updating state from cache: \(cachedStatus)")
+             self.hasConnectedBankAccount = cachedStatus
+        }
+
+        // 2. Start background check
+        guard !isCheckingStatus else {
+            print("checkUserStatus: Already checking status.")
+            return
+        } // Prevent concurrent checks
+        print("checkUserStatus: Starting background check via API call...")
+        isCheckingStatus = true
+
+        // Ensure apiService is available
+        guard apiService != nil else {
+            print("checkUserStatus: Error - APIService not initialized!")
+            isCheckingStatus = false
+            return
+        }
+
+        apiService.fetchUserStatus { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.isCheckingStatus = false
+                switch result {
+                case .success(let status):
+                    print("checkUserStatus: Background check successful. Fetched Status = \(status)")
+                    // Update published property *and* UserDefaults if changed
+                    if self.hasConnectedBankAccount != status {
+                        self.hasConnectedBankAccount = status
+                        self.userDefaults.set(status, forKey: self.userDefaultsStatusKey)
+                        print("checkUserStatus: Updated state AND cache to \(status).")
+                    } else {
+                         print("checkUserStatus: Fetched status (\(status)) matches current state. No update needed.")
+                    }
+                case .failure(let error):
+                    // Handle error appropriately (log, show alert?)
+                    print("checkUserStatus: Background check failed: \(error.localizedDescription)")
+                    // Optional: Decide if you want to reset hasConnectedBankAccount to false on error
+                    // self.hasConnectedBankAccount = false
+                    // self.userDefaults.set(false, forKey: self.userDefaultsStatusKey)
                 }
+            }
+        }
+    }
+
+    // MARK: - Authentication Methods
+
+    // --- Get ID Token (Needed by APIService) ---
+    func getIDToken(completion: @escaping (String?) -> Void) {
+        user?.getIDTokenResult(forcingRefresh: false) { result, error in // Don't force refresh unless needed
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("Error getting ID token: \(error)")
+                    // Handle specific errors? e.g., network error
+                    self.errorMessage = "Could not verify session. Please try again." // Example error message
+                    completion(nil)
+                    return
+                }
+                print("Successfully retrieved ID token.")
+                completion(result?.token)
             }
         }
     }
@@ -130,6 +227,40 @@ class AuthViewModel: NSObject, ObservableObject {
                     print("   -> Firebase User UID: \(userId)")
                     print("   -> Use this UID ('\(userId)') to fetch/reference user data in Firestore (e.g., /users/\(userId), /plaidItems where userId == '\(userId)')")
                     // isAuthenticated will be updated to true by the authStateHandler
+                }
+            }
+        }
+    }
+
+    // --- Password Reset ---
+    func sendPasswordReset(email: String) {
+        // Basic email validation
+        guard !email.isEmpty, email.contains("@") else {
+            self.errorMessage = "Please enter a valid email address."
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+        passwordResetSent = false // Reset flag
+        print("Attempting to send password reset email to: \(email)")
+
+        // Set language code if needed (example using device default)
+        Auth.auth().useAppLanguage()
+
+        Auth.auth().sendPasswordReset(withEmail: email) { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.isLoading = false
+
+                if let error = error {
+                    self.errorMessage = self.mapFirebaseError(error) // Use helper for consistency
+                    print("Password reset error: \(error.localizedDescription)")
+                } else {
+                    self.errorMessage = nil
+                    self.passwordResetSent = true // Signal success
+                    print("Password reset email sent successfully to \(email).")
+                    // UI should show an alert based on passwordResetSent
                 }
             }
         }

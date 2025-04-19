@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/plaid/plaid-go/v32/plaid"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/api/iterator"
 
 	"github.com/ukhan1219/glance/backend/internal/config"
 	"github.com/ukhan1219/glance/backend/internal/database" // Import database package
@@ -242,5 +243,43 @@ func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, dbServ
 			Month: totalMonth,
 		}
 		c.JSON(http.StatusOK, summary)
+	}
+}
+
+// GetUserStatusHandler checks if the authenticated user has linked Plaid items.
+func GetUserStatusHandler(dbService *database.DatabaseService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		firebaseUser, exists := GetUserFromContext(c)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+		userID := firebaseUser.UID
+		ctx := c.Request.Context() // Use request context
+
+		logFields := log.Fields{"userID": userID}
+		log.WithFields(logFields).Info("Checking Plaid connection status...")
+
+		// Use the Firestore client directly for efficient existence check
+		iter := dbService.GetFirestoreClient().Collection(database.PlaidItemsCollectionName).Where("userId", "==", userID).Limit(1).Documents(ctx)
+		_, err := iter.Next() // We only care if there's at least one doc
+
+		hasConnected := false
+		if err == nil {
+			hasConnected = true // Found at least one document
+			log.WithFields(logFields).Info("User has connected bank account(s).")
+		} else if err == iterator.Done {
+			// No documents found
+			log.WithFields(logFields).Info("User has not connected any bank accounts.")
+			hasConnected = false
+		} else {
+			// Firestore error
+			log.WithFields(logFields).Errorf("Error checking Firestore for Plaid items: %v", err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to check account status"})
+			return
+		}
+		iter.Stop() // Ensure iterator is stopped
+
+		c.JSON(http.StatusOK, gin.H{"hasConnectedBankAccount": hasConnected})
 	}
 }

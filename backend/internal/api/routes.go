@@ -66,6 +66,15 @@ func SetupRoutes(
 	// 	userGroup.GET("/me", GetCurrentUserHandler(firestoreClient)) // Example endpoint
 	// }
 
+	// --- User Routes (Require Authentication) ---
+	userGroup := apiGroup.Group("/users")
+	userGroup.Use(AuthMiddleware(authClient)) // Apply auth middleware
+	{
+		log.Info("Setting up /api/v1/users routes...")
+		userGroup.GET("/me/status", GetUserStatusHandler(dbService)) // Add the new route
+		// Add other user-specific routes here if needed (e.g., /me for profile)
+	}
+
 	log.Info("Finished setting up API routes.")
 }
 

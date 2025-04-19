@@ -51,8 +51,8 @@ struct LoginView: View {
                         HStack {
                             Spacer()
                             LinkButton(title: "Forgot Password ?") {
-                                // TODO: Implement forgot password action
-                                print("Forgot Password tapped")
+                                print("Forgot Password tapped - Email: \(email)")
+                                authViewModel.sendPasswordReset(email: email)
                             }
                             Spacer()
                         }
@@ -97,8 +97,14 @@ struct LoginView: View {
                  }
             }
         } // End NavigationStack
+        // Add alert modifier to show feedback for password reset
+        .alert("Password Reset", isPresented: $authViewModel.passwordResetSent, actions: {
+            Button("OK", role: .cancel) { }
+        }, message: {
+            Text("If an account exists for \(email), you will receive an email with instructions to reset your password.")
+        })
         .onAppear {
-            authViewModel.errorMessage = nil
+            authViewModel.errorMessage = nil // Clear errors on appear
         }
     }
 
