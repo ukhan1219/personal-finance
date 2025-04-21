@@ -163,8 +163,9 @@ func (s *DatabaseService) GetUserAccessTokens(ctx context.Context, userID string
 		decryptedToken, err := encryption.Decrypt(item.EncryptedAccessToken, s.encryptionKey)
 		if err != nil {
 			log.WithFields(logFields).Errorf("Failed to decrypt token for item %s: %v", doc.Ref.ID, err)
+			// Stop processing and return error immediately if decryption fails
+			return nil, fmt.Errorf("failed to decrypt access token for item %s: %w", doc.Ref.ID, err)
 			// Depending on policy, you might want to return an error here instead of just skipping.
-			continue
 		}
 		log.WithFields(logFields).Debugf("Successfully retrieved and decrypted token for item %s", doc.Ref.ID)
 		tokens = append(tokens, decryptedToken)

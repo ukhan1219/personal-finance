@@ -479,11 +479,11 @@ class AuthViewModel: NSObject, ObservableObject {
     }
 
     // --- Placeholder for Biometrics ---
-    func authenticateWithBiometrics(completion: @escaping (Bool, Error?) -> Void) {
-        // TODO: Implement Biometric Auth Flow using LocalAuthentication
-        print("Biometric Auth requested - Not implemented")
-        completion(false, nil) // Placeholder
-    }
+    // func authenticateWithBiometrics(completion: @escaping (Bool, Error?) -> Void) {
+    //     // TODO: Implement Biometric Auth Flow using LocalAuthentication
+    //     print("Biometric Auth requested - Not implemented")
+    //     completion(false, nil) // Placeholder
+    // }
 
     // MARK: - Biometric/Local Authentication
 

@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "glance-45cde"
-  }
+    "default": "glance-45cde",
+    "production": "glance-prod-457519"
+  },
+  "targets": {},
+  "etags": {}
 }

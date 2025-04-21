@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"firebase.google.com/go/v4/auth"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/plaid/plaid-go/v32/plaid"
 	log "github.com/sirupsen/logrus"
@@ -34,6 +35,14 @@ func SetupRoutes(
 	plaidClient *plaid.APIClient,
 ) {
 	log.Info("Setting up API routes...")
+
+	// --- General Middleware ---
+	// Add CORS middleware with default configuration.
+	// IMPORTANT: For production, consider configuring specific origins
+	// instead of cors.Default() which allows all origins (*).
+	// Example: cors.New(cors.Config{ AllowOrigins: []string{"https://your-web-app.com"}, ... })
+	router.Use(cors.Default())
+	log.Info("Applied default CORS middleware.")
 
 	// --- Public Routes ---
 	// Health check - already added in main, but good practice to have it grouped if more public routes are added

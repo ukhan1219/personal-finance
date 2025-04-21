@@ -797,6 +797,7 @@
 				INFOPLIST_FILE = Glance/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Glance;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Please authenticate to access your Glance financial data.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -830,6 +831,7 @@
 				INFOPLIST_FILE = Glance/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Glance;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Please authenticate to access your Glance financial data.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -16,7 +16,7 @@ type Config struct {
 	PlaidClientID           string
 	PlaidSecret             string
 	PlaidEnv                string // e.g., "sandbox", "development", "production"
-	FirebaseCredentials     string // Path to Firebase service account key
+	// FirebaseCredentials     string // Path to Firebase service account key
 	PlaidTokenEncryptionKey string // Base64 encoded AES-256 key (32 bytes raw)
 	// Add other config fields as needed, e.g., JWT secret, encryption keys
 }
@@ -43,8 +43,14 @@ func Load() (*Config, error) {
 		"PLAID_CLIENT_ID":            &cfg.PlaidClientID,
 		"PLAID_SECRET":               &cfg.PlaidSecret,
 		"PLAID_ENV":                  &cfg.PlaidEnv,
-		"FIREBASE_CREDENTIALS":       &cfg.FirebaseCredentials,
+		// "FIREBASE_CREDENTIALS":       &cfg.FirebaseCredentials,
 		"PLAID_TOKEN_ENCRYPTION_KEY": &cfg.PlaidTokenEncryptionKey, // Add key loading
+	}
+
+	// Define sensitive keys that should not have their values logged
+	sensitiveKeys := map[string]bool{
+		"PLAID_SECRET":               true,
+		"PLAID_TOKEN_ENCRYPTION_KEY": true,
 	}
 
 	// Load required variables
@@ -55,8 +61,13 @@ func Load() (*Config, error) {
 			log.Error(errMsg)
 			return nil, fmt.Errorf(errMsg)
 		}
-		*pointer = value                     // Assign address of value
-		log.Debugf("Loaded env var %s", key) // Don't log secrets in production
+		*pointer = value // Assign value to the pointed-to string
+		// Log loaded variable, masking sensitive ones
+		if sensitiveKeys[key] {
+			log.Debugf("Loaded sensitive env var %s", key)
+		} else {
+			log.Debugf("Loaded env var %s", key) // Continue logging non-sensitive keys
+		}
 	}
 
 	// Validate and parse specific fields
@@ -95,11 +106,11 @@ func Load() (*Config, error) {
 	log.Infof("Configuration loaded successfully. Port: %s, Plaid Env: %s", cfg.Port, cfg.PlaidEnv)
 
 	// Validate Firebase credentials file exists (optional basic check)
-	if _, err := os.Stat(cfg.FirebaseCredentials); os.IsNotExist(err) {
-		log.Warnf("Firebase credentials file not found at path specified by FIREBASE_CREDENTIALS: %s", cfg.FirebaseCredentials)
-		// Depending on deployment, this might be acceptable if credentials are handled differently (e.g., GCP service account)
-		// Return nil, fmt.Errorf("firebase credentials file not found: %s", cfg.FirebaseCredentials) // Uncomment to make it a hard error
-	}
+	// if _, err := os.Stat(cfg.FirebaseCredentials); os.IsNotExist(err) {
+	// 	log.Warnf("Firebase credentials file not found at path specified by FIREBASE_CREDENTIALS: %s", cfg.FirebaseCredentials)
+	// 	// Depending on deployment, this might be acceptable if credentials are handled differently (e.g., GCP service account)
+	// 	// Return nil, fmt.Errorf("firebase credentials file not found: %s", cfg.FirebaseCredentials) // Uncomment to make it a hard error
+	// }
 
 	return cfg, nil
 }

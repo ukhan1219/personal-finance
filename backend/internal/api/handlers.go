@@ -165,36 +165,43 @@ func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, dbServ
 			return
 		}
 		userID := firebaseUser.UID
+		// Add log context
+		logFields := log.Fields{"userID": userID}
+		logCtx := log.WithFields(logFields)
+		logCtx.Info("GetSpendingHandler invoked") // Added log
 
 		// 2. Get User's Plaid Access Tokens using DatabaseService method
 		accessTokens, err := dbService.GetUserAccessTokens(c.Request.Context(), userID) // Use dbService method
 		if err != nil {
-			log.Errorf("Failed to retrieve access tokens for user %s: %v", userID, err)
+			logCtx.Errorf("Failed to retrieve access tokens: %v", err) // Use logCtx
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Could not retrieve account connection details"})
 			return
 		}
 
 		if len(accessTokens) == 0 {
+			logCtx.Info("User has no connected accounts.") // Added log
 			c.JSON(http.StatusOK, domain.SpendingSummary{Today: 0, Week: 0, Month: 0})
 			return
 		}
 
-		// 3. Calculate Date Ranges (Rolling period ending today)
-		now := time.Now()
-		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()) // Start of today
-		weekStart := todayStart.AddDate(0, 0, -6)                                               // Start of day 6 days ago
-		monthStart := todayStart.AddDate(0, -1, 0)                                              // Start of day 1 month ago (e.g., if today is May 16, this is April 17)
+		// 3. Calculate Date Ranges (Rolling period ending today, using UTC)
+		now := time.Now().UTC()                                                           // Use UTC
+		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC) // Use UTC
+		weekStart := todayStart.AddDate(0, 0, -6)                                         // Start of day 6 days ago (UTC)
+		monthStart := todayStart.AddDate(0, -1, 0)                                        // Start of day 1 month ago (UTC)
 
 		endDateStr := now.Format("2006-01-02")               // Plaid uses YYYY-MM-DD
 		monthStartDateStr := monthStart.Format("2006-01-02") // Plaid uses YYYY-MM-DD
+
+		logCtx.Infof("Calculating spending for dates: %s to %s", monthStartDateStr, endDateStr) // Added log
 
 		var totalToday, totalWeek, totalMonth float64
 
 		ctx := c.Request.Context() // Use request context for Plaid calls
 
 		// 4. Iterate through each access token and fetch transactions
-		for _, token := range accessTokens {
-			// TODO: Decrypt token if it was stored encrypted
+		for i, token := range accessTokens { // Added index for logging
+			tokenLogCtx := logCtx.WithField("tokenIndex", i) // Log context per token
 
 			options := plaid.NewTransactionsGetRequestOptions()
 			options.SetCount(500)
@@ -204,11 +211,13 @@ func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, dbServ
 
 			resp, _, err := plaidClient.PlaidApi.TransactionsGet(ctx).TransactionsGetRequest(*req).Execute()
 			if err != nil {
-				// No logging here, just continue
+				// Log the error before skipping the token
+				tokenLogCtx.Warnf("Failed to get transactions for token, skipping: %v", err)
 				continue // Skip this token if transactions fail
 			}
 
 			// 5. Process Transactions and Aggregate Spending
+			tokenTxnCount := 0 // Count transactions processed for this token
 			for _, txn := range resp.GetTransactions() {
 				// Plaid amounts: positive means money flowing out (spending)
 				amount := txn.GetAmount()
@@ -234,6 +243,8 @@ func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, dbServ
 					totalToday += amount
 				}
 			}
+			tokenTxnCount++
+			tokenLogCtx.Infof("Processed %d transactions for this token.", tokenTxnCount)
 		} // End loop through tokens
 
 		// 6. Return Aggregated Spending Summary
@@ -242,6 +253,7 @@ func GetSpendingHandler(cfg *config.Config, plaidClient *plaid.APIClient, dbServ
 			Week:  totalWeek,
 			Month: totalMonth,
 		}
+		logCtx.Infof("Returning spending summary: Today=%.2f, Week=%.2f, Month=%.2f", totalToday, totalWeek, totalMonth)
 		c.JSON(http.StatusOK, summary)
 	}
 }
@@ -258,7 +270,8 @@ func GetUserStatusHandler(dbService *database.DatabaseService) gin.HandlerFunc {
 		ctx := c.Request.Context() // Use request context
 
 		logFields := log.Fields{"userID": userID}
-		log.WithFields(logFields).Info("Checking Plaid connection status...")
+		logCtx := log.WithFields(logFields) // Create context logger
+		logCtx.Info("Checking Plaid connection status...")
 
 		// Use the Firestore client directly for efficient existence check
 		iter := dbService.GetFirestoreClient().Collection(database.PlaidItemsCollectionName).Where("userId", "==", userID).Limit(1).Documents(ctx)
@@ -267,14 +280,14 @@ func GetUserStatusHandler(dbService *database.DatabaseService) gin.HandlerFunc {
 		hasConnected := false
 		if err == nil {
 			hasConnected = true // Found at least one document
-			log.WithFields(logFields).Info("User has connected bank account(s).")
+			logCtx.Info("User has connected bank account(s).")
 		} else if err == iterator.Done {
 			// No documents found
-			log.WithFields(logFields).Info("User has not connected any bank accounts.")
+			logCtx.Info("User has not connected any bank accounts.")
 			hasConnected = false
 		} else {
 			// Firestore error
-			log.WithFields(logFields).Errorf("Error checking Firestore for Plaid items: %v", err)
+			logCtx.Errorf("Error checking Firestore for Plaid items: %v", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to check account status"})
 			return
 		}

@@ -4,6 +4,11 @@ import (
 	"context"
 	"encoding/base64" // Import base64
 	"fmt"
+	"net/http"  // Added for http.Server
+	"os"        // Added for signal handling
+	"os/signal" // Added for signal handling
+	"syscall"   // Added for signal handling
+	"time"      // Added for context timeout
 
 	// Remove direct import of firestore client type, it's handled in database package
 	// "cloud.google.com/go/firestore"
@@ -13,7 +18,6 @@ import (
 	// "firebase.google.com/go/v4/auth"
 
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/api/option"
 
 	"github.com/gin-gonic/gin"
 	// Remove direct import of plaid library, it's handled in the plaid package
@@ -40,9 +44,9 @@ import (
 //	(*firebase.App, error): The initialized Firebase app instance and an error if initialization fails.
 func initFirebase(ctx context.Context, cfg *config.Config) (*firebase.App, error) {
 	log.Info("Attempting to initialize Firebase Admin SDK App...")
-	opt := option.WithCredentialsFile(cfg.FirebaseCredentials)
+	// opt := option.WithCredentialsFile(cfg.FirebaseCredentials)
 	// Use firebase.NewApp from the v4 package
-	app, err := firebase.NewApp(ctx, nil, opt)
+	app, err := firebase.NewApp(ctx, nil)
 	if err != nil {
 		log.Errorf("Error initializing Firebase app: %v", err)
 		return nil, fmt.Errorf("error initializing Firebase app: %w", err)
@@ -127,10 +131,62 @@ func main() {
 	api.SetupRoutes(router, cfg, authClient, dbService, plaidClient) // Pass dbService
 	log.Info("API routes setup.")
 
-	// --- Start Server ---
+	// --- Start Server with Graceful Shutdown ---
 	serverAddr := ":" + cfg.Port
-	log.Infof("Starting HTTP server on %s", serverAddr)
-	if err := router.Run(serverAddr); err != nil {
-		log.Fatalf("Failed to run server: %v", err)
+	log.Infof("Attempting to start HTTP server on %s", serverAddr)
+
+	// Create the HTTP server
+	srv := &http.Server{
+		Addr:    serverAddr,
+		Handler: router, // Use the Gin engine as the handler
 	}
+
+	// Start the server in a goroutine
+	go func() {
+		log.Infof("Starting HTTP server on %s", serverAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to listen and serve: %v", err)
+		}
+	}()
+
+	// --- Wait for interrupt signal to gracefully shut down the server ---
+	quit := make(chan os.Signal, 1) // Buffer of 1
+	// Notify sends the specified signals to the channel.
+	// SIGINT: Sent on Ctrl+C.
+	// SIGTERM: Standard signal for termination.
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Block until a signal is received.
+	<-quit
+	log.Info("Received shutdown signal. Starting graceful shutdown...")
+
+	// Create a context with a timeout for the shutdown.
+	// Give outstanding requests 5 seconds to finish.
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+
+	// Attempt to gracefully shut down the HTTP server.
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Errorf("Server forced to shutdown: %v", err)
+	}
+
+	// --- Close Firestore Connection ---
+	// Use a separate context for Firestore closure, potentially with its own timeout
+	// if the 5-second server shutdown timeout isn't sufficient.
+	closeDbCtx, cancelCloseDb := context.WithTimeout(context.Background(), 10*time.Second) // Example: 10s timeout for DB close
+	defer cancelCloseDb()
+
+	// Call the CloseFirestore method from the DatabaseService
+	if dbService != nil {
+		log.Info("Closing Firestore client as part of graceful shutdown...")
+		if err := dbService.CloseFirestore(closeDbCtx); err != nil {
+			log.Errorf("Error closing Firestore client during shutdown: %v", err)
+		} else {
+			log.Info("Firestore client closed successfully during shutdown.")
+		}
+	} else {
+		log.Warn("dbService was nil during shutdown, couldn't close Firestore.")
+	}
+
+	log.Info("Server exiting.")
 }

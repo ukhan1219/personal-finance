@@ -6,7 +6,6 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -50,7 +49,7 @@ func AuthMiddleware(authClient *auth.Client) gin.HandlerFunc {
 		idToken := parts[1]
 
 		// VerifyIDToken is a method on the *auth.Client type from v4/auth
-		token, err := authClient.VerifyIDToken(context.Background(), idToken)
+		token, err := authClient.VerifyIDToken(c.Request.Context(), idToken)
 		if err != nil {
 			log.Warnf("Error verifying Firebase ID token: %v", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})

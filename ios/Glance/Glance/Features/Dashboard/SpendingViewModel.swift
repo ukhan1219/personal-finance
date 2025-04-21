@@ -12,9 +12,6 @@ class SpendingViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     // MARK: - Cache Properties
-    private let userDefaults = UserDefaults.standard
-    private let cachedSpendingDataKey = "cachedSpendingData"
-    private let cachedSpendingTimestampKey = "cachedSpendingTimestamp"
     private let cacheDuration: TimeInterval = 3600 // Cache for 1 hour (in seconds)
 
     // MARK: - Initializer
@@ -32,8 +29,11 @@ class SpendingViewModel: ObservableObject {
     func refreshSpendingDataIfNeeded() {
         print("SpendingViewModel: refreshSpendingDataIfNeeded called.")
 
+        // Load timestamp directly from Keychain helper
+        let (_, cachedTimestamp) = KeychainHelper.loadSpendingSummary()
+
         // Check if cache is stale or missing, then trigger network fetch
-        if let timestamp = userDefaults.object(forKey: cachedSpendingTimestampKey) as? Date {
+        if let timestamp = cachedTimestamp {
             let age = Date().timeIntervalSince(timestamp)
             print("SpendingViewModel: Cache age: \(age) seconds.")
             if age > cacheDuration {
@@ -45,31 +45,25 @@ class SpendingViewModel: ObservableObject {
                 // fetchSpendingDataFromServer()
             }
         } else {
-            print("SpendingViewModel: No cache timestamp found. Fetching from network.")
+            print("SpendingViewModel: No cache timestamp found in Keychain. Fetching from network.")
             fetchSpendingDataFromServer() // Fetch if no timestamp exists
         }
     }
 
-    /// Attempts to load and decode spending data from UserDefaults.
+    /// Attempts to load and decode spending data from Keychain.
     private func loadFromCache() {
-        if let timestamp = userDefaults.object(forKey: cachedSpendingTimestampKey) as? Date,
-           let savedData = userDefaults.data(forKey: cachedSpendingDataKey) {
-            do {
-                let decoder = JSONDecoder()
-                let cachedSummary = try decoder.decode(SpendingSummary.self, from: savedData)
-                // Update published property ONLY if it's different or nil to avoid unnecessary UI refreshes
-                if self.spendingSummary == nil || self.spendingSummary?.today != cachedSummary.today || self.spendingSummary?.week != cachedSummary.week || self.spendingSummary?.month != cachedSummary.month {
-                    self.spendingSummary = cachedSummary
-                    print("SpendingViewModel: Successfully loaded data from cache (Timestamp: \(timestamp)).")
-                } else {
-                    print("SpendingViewModel: Cache data matches current state. Not updating UI from cache.")
-                }
-            } catch {
-                print("SpendingViewModel: Failed to decode cached spending data: \(error). Clearing cache.")
-                clearCache()
-            }
+        let (cachedSummary, timestamp) = KeychainHelper.loadSpendingSummary()
+
+        if let summary = cachedSummary, let ts = timestamp {
+            // Update published property ONLY if it's different or nil to avoid unnecessary UI refreshes
+            if self.spendingSummary == nil || self.spendingSummary != summary {
+                 self.spendingSummary = summary
+                 print("SpendingViewModel: Successfully loaded data from Keychain cache (Timestamp: \(ts)).")
+             } else {
+                 print("SpendingViewModel: Keychain cache data matches current state. Not updating UI from cache.")
+             }
         } else {
-            print("SpendingViewModel: No spending data found in cache.")
+             print("SpendingViewModel: No spending data found in Keychain cache.")
         }
     }
 
@@ -92,7 +86,11 @@ class SpendingViewModel: ObservableObject {
                 switch result {
                 case .success(let summary):
                     print("SpendingViewModel: Successfully fetched data from network.")
-                    self.spendingSummary = summary
+                    // Update UI only if data changed
+                    if self.spendingSummary != summary {
+                        self.spendingSummary = summary
+                    }
+                    // Save to Keychain regardless of change to update timestamp
                     self.saveToCache(summary: summary)
 
                 case .failure(let error):
@@ -110,24 +108,23 @@ class SpendingViewModel: ObservableObject {
         }
     }
 
-    /// Saves the fetched spending data and current timestamp to UserDefaults.
+    /// Saves the fetched spending data and current timestamp to Keychain.
     private func saveToCache(summary: SpendingSummary) {
-        do {
-            let encoder = JSONEncoder()
-            let data = try encoder.encode(summary)
-            userDefaults.set(data, forKey: cachedSpendingDataKey)
-            userDefaults.set(Date(), forKey: cachedSpendingTimestampKey)
-            print("SpendingViewModel: Successfully saved data to cache.")
-        } catch {
-            print("SpendingViewModel: Failed to encode spending data for caching: \(error)")
-        }
+         if KeychainHelper.saveSpendingSummary(summary) {
+             print("SpendingViewModel: Successfully saved data to Keychain cache.")
+         } else {
+             print("SpendingViewModel: Failed to save spending data to Keychain cache.")
+             // Consider reporting this failure
+         }
     }
 
-    /// Removes spending data cache from UserDefaults.
+    /// Removes spending data cache from Keychain.
     private func clearCache() {
-        userDefaults.removeObject(forKey: cachedSpendingDataKey)
-        userDefaults.removeObject(forKey: cachedSpendingTimestampKey)
-        print("SpendingViewModel: Cleared spending data cache.")
+        if KeychainHelper.clearSpendingCache() {
+             print("SpendingViewModel: Cleared spending data Keychain cache.")
+         } else {
+             print("SpendingViewModel: Failed to clear spending data Keychain cache.")
+         }
     }
 }
 

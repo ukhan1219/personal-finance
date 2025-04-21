@@ -68,12 +68,19 @@ struct LoginView: View {
 
                         OrDivider()
                         socialLoginButtons
-                    }
-
+                    }.padding(.bottom, 16)
+Text("By continuing, you agree to our [terms](https://usmankhan.dev/TC.pdf), see how we use your data in our [privacy policy](https://usmankhan.dev/PP.pdf)")
+                        .font(.custom("Inter-Medium", size: 12))
+                        .foregroundColor(.secondaryText)
+                        .kerning(-0.01 * 12)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 16) // Add some space before the sign up link
                     // Spacer to push the "Sign Up" link to the bottom
                     Spacer()
                     Spacer()
 
+                    // --- Legal Text ---
+                    
                     // Sign Up Link (This remains at the bottom)
                     HStack(spacing: 6) {
                         Text("Don't have an account?")
@@ -87,8 +94,11 @@ struct LoginView: View {
                         .font(.custom("Inter-SemiBold", size: 12))
                         .foregroundColor(.accent)
                         .kerning(-0.01 * 12)
+                        
+
                     }
                     .padding(.bottom, 16) // Bottom padding from Figma
+                    
                 }
                 .padding(.horizontal, 32)
                  // Add the navigationDestination modifier here

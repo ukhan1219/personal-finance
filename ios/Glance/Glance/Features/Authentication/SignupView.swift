@@ -75,6 +75,14 @@ struct SignupView: View {
                          .fixedSize(horizontal: false, vertical: true)
                  }
 
+                 // --- Legal Text ---
+                 Text("By continuing, you agree to our [terms](https://usmankhan.dev/TC.pdf), see how we use your data in our [privacy policy](https://usmankhan.dev/PP.pdf)")
+                     .font(.custom("Inter-Medium", size: 12))
+                     .foregroundColor(.secondaryText)
+                     .kerning(-0.01 * 12)
+                     .multilineTextAlignment(.center)
+                     .padding(.bottom, 16) // Add some space before the bottom
+
                  // --- Spacers at the bottom (more weight) ---
                  // Adding two Spacers here makes the bottom space larger than the top,
                  // pushing the content slightly higher for better visual centering.
