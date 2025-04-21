@@ -5,9 +5,9 @@ import GoogleSignIn
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-        // FirebaseApp.configure() // <-- REMOVE THIS LINE
+        // FirebaseApp.configure() // <-- REMOVE this call
         // Add other AppDelegate setup here later if needed (e.g., push notifications)
-        print("AppDelegate: didFinishLaunchingWithOptions") // Add log
+        print("AppDelegate: didFinishLaunchingWithOptions - Firebase configured in GlanceApp init.") // Update log
         return true
     }
 

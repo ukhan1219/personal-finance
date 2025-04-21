@@ -30,7 +30,7 @@ struct PlaidConnectView: View {
                 // --- Loading Indicator --- (Shown while PlaidVM is loading)
                 
                     // --- Connect Button --- (Shown when not loading)
-                    PrimaryButton(title: "Connect bank account") {
+                    PrimaryButton(title: "", iconName: "plaid-logo") {
                         connectBankAccountAction()
                     }
                     .padding(.bottom, 16)
@@ -50,7 +50,7 @@ struct PlaidConnectView: View {
                 Spacer()
                 Spacer()
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 32)
         }
         .onAppear {
             // Clear any previous Plaid error when the view appears

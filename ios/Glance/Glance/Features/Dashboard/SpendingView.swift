@@ -60,12 +60,6 @@ struct SpendingView: View {
                     // --- Logout Button (Temporary) ---
                     HStack {
                         Spacer()
-                        Button("Logout") {
-                            authViewModel.signOut()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.red.opacity(0.8))
-                        .padding()
                         Spacer()
                     }
 
@@ -90,10 +84,6 @@ struct SpendingView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-        }
-        .onAppear {
-            print("SpendingView appeared. Loading data...")
-            viewModel.loadSpendingData()
         }
     }
 }

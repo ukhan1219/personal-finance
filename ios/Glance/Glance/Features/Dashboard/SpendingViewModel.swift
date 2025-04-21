@@ -21,19 +21,18 @@ class SpendingViewModel: ObservableObject {
     init(apiService: APIService) {
         self.apiService = apiService
         print("SpendingViewModel: Initialized")
-        // Initial load from cache can happen here or triggered by view's onAppear
+        // --- Load initial data from cache upon initialization ---
+        loadFromCache()
     }
 
     // MARK: - Data Loading and Caching
 
-    /// Loads spending data, prioritizing cache and then fetching from the network.
-    /// Call this from the View's .onAppear.
-    func loadSpendingData() {
-        print("SpendingViewModel: loadSpendingData called.")
-        // 1. Attempt to load from cache immediately
-        loadFromCache()
+    /// Checks if the cached spending data is stale and triggers a network fetch if needed.
+    /// Should be called when the app becomes active and is unlocked.
+    func refreshSpendingDataIfNeeded() {
+        print("SpendingViewModel: refreshSpendingDataIfNeeded called.")
 
-        // 2. Check if cache is stale or missing, then trigger network fetch
+        // Check if cache is stale or missing, then trigger network fetch
         if let timestamp = userDefaults.object(forKey: cachedSpendingTimestampKey) as? Date {
             let age = Date().timeIntervalSince(timestamp)
             print("SpendingViewModel: Cache age: \(age) seconds.")
@@ -41,9 +40,9 @@ class SpendingViewModel: ObservableObject {
                 print("SpendingViewModel: Cache is stale (older than \(cacheDuration)s). Fetching from network.")
                 fetchSpendingDataFromServer()
             } else {
-                print("SpendingViewModel: Cache is fresh. Network fetch not required immediately.")
-                // Optional: Still trigger a background refresh even if cache is fresh?
-                // fetchSpendingDataFromServer() // Uncomment to always refresh in background
+                print("SpendingViewModel: Cache is fresh. Background fetch not required.")
+                // Optionally: If you *always* want a background refresh uncomment below
+                // fetchSpendingDataFromServer()
             }
         } else {
             print("SpendingViewModel: No cache timestamp found. Fetching from network.")

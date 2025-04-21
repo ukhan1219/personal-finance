@@ -15,6 +15,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Please authenticate to access your Glance financial data.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Inter_18pt-Black.ttf</string>
