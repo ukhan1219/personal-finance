@@ -1,61 +1,47 @@
 import * as logger from "firebase-functions/logger";
 import * as functions from "firebase-functions/v1";
-import * as admin from "firebase-admin"; // Import Firebase Admin SDK
-import {FieldValue} from "firebase-admin/firestore"; // Import FieldValue
+import * as admin from "firebase-admin";
+import {FieldValue} from "firebase-admin/firestore";
 import {UserRecord} from "firebase-admin/auth";
 
-// Initialize Firebase Admin SDK ONLY ONCE at the top level
-// This uses the default credentials of the Cloud Functions runtime environment
-admin.initializeApp();
+// Initialize Firebase Admin SDK once with explicit project ID
+admin.initializeApp({
+  projectId: process.env.GOOGLE_CLOUD_PROJECT || "glance-prod-457519",
+});
 
-const firestore = admin.firestore(); // Get Firestore instance
-const usersCollection = "users"; // Define collection name
+// Obtain Firestore instance and configure it for the named database
+const firestore = admin.firestore();
+firestore.settings({
+  // Ensures the client connects to your 'glance-prod' database, not '(default)'
+  databaseId: "glance-prod",
+});
 
-/**
- * Cloud Function triggered when a new Firebase Authentication user is created.
- * Creates a corresponding document in the 'users' collection in Firestore.
- */
+// Confirm Firestore settings have been applied
+logger.info(`Firestore init for db 'glance-prod': ${Boolean(firestore)}`);
+
+const usersCollection = "users";
+
 export const createUserDocument = functions.auth
   .user()
   .onCreate(async (user: UserRecord) => {
     const {uid, email} = user;
-
-    logger.info(
-      "New user signed up: " +
-      `UID=${uid}, ` +
-      "Creating Firestore doc."
-    );
+    logger.info(`New user: UID=${uid}. Starting Firestore write.`);
 
     if (!uid) {
-      logger.error("User UID is missing in the auth event. Cannot create doc.");
+      logger.error("Missing UID in auth event; aborting user doc creation.");
       return;
     }
 
-    // Prepare the data for the new user document
     const newUserData = {
       email: email ?? null,
       createdAt: FieldValue.serverTimestamp(),
     };
 
-    // Get a reference to the document path: /users/{userID}
     const userDocRef = firestore.collection(usersCollection).doc(uid);
-
     try {
-      // Set the data in Firestore
       await userDocRef.set(newUserData);
-      logger.info(
-        "Successfully created Firestore document for user: " +
-        `${uid}`
-      );
+      logger.info(`User document created at /users/${uid}`);
     } catch (error) {
-      logger.error(
-        "Failed to create Firestore document for user: " +
-        `${uid}`,
-        error
-      );
-      // Consider adding more robust error handling or retries if needed
+      logger.error(`Failed to create user document for UID=${uid}`, error);
     }
   });
-
-// You can add other functions (HTTP, Firestore triggers, etc.) here as needed
-// e.g., export const anotherFunction = onRequest(...)

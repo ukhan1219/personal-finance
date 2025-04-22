@@ -3,13 +3,8 @@ import Foundation
 class APIService {
     // TODO: Replace with your actual deployed backend URL or load from config
     // Temporarily pointing to local backend for testing
-    private var baseURL: String {
-        #if DEBUG
-        return "http://localhost:8080/api/v1" // Keep for local testing
-        #else
-        return "https://glance-backend-222325137575.us-east1.run.app/api/v1" // PRODUCTION URL
-        #endif
-    }
+    private let baseURL = "https://glance-backend-222325137575.us-east1.run.app/api/v1" // Using v1 base path
+
     // Use dependency injection to get the AuthViewModel for fetching the token
     private weak var authViewModel: AuthViewModel?
 

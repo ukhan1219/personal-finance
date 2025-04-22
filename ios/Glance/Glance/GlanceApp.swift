@@ -61,11 +61,12 @@ struct GlanceApp: App {
         // 3. Inject APIService into AuthViewModel (for getIDToken)
         authVM.setupAPIService(apiService: apiSvc)
 
-        // 4. PlaidViewModel (needs APIService, AuthViewModel)
-        _plaidViewModel = StateObject(wrappedValue: PlaidViewModel(apiService: apiSvc, authViewModel: authVM))
+        // 4. SpendingViewModel (needs APIService) - Create BEFORE PlaidViewModel
+        let spendingVM = SpendingViewModel(apiService: apiSvc)
+        _spendingViewModel = StateObject(wrappedValue: spendingVM)
 
-        // 5. SpendingViewModel (needs APIService)
-        _spendingViewModel = StateObject(wrappedValue: SpendingViewModel(apiService: apiSvc))
+        // 5. PlaidViewModel (needs APIService, AuthViewModel, SpendingViewModel)
+        _plaidViewModel = StateObject(wrappedValue: PlaidViewModel(apiService: apiSvc, authViewModel: authVM, spendingViewModel: spendingVM))
 
         print("GlanceApp Init: ViewModels and Services Initialized.")
     }

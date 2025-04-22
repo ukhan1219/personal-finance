@@ -7,6 +7,7 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
     // MARK: - Dependencies
     private let apiService: APIService
     private weak var authViewModel: AuthViewModel? // Use weak to avoid retain cycles if passed around
+    private weak var spendingViewModel: SpendingViewModel? // <-- Add weak reference
 
     // MARK: - Published State Properties
     @Published var isLoading: Bool = false
@@ -19,12 +20,13 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initializer
-    init(apiService: APIService, authViewModel: AuthViewModel) {
+    init(apiService: APIService, authViewModel: AuthViewModel, spendingViewModel: SpendingViewModel) {
         self.apiService = apiService
         self.authViewModel = authViewModel
+        self.spendingViewModel = spendingViewModel // <-- Store the reference
         super.init()
         // setupNotificationObserver() // <-- Comment out observer setup
-        print("PlaidViewModel: Initialized")
+        print("PlaidViewModel: Initialized with SpendingViewModel reference.")
     }
 
     deinit {
@@ -49,7 +51,7 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
             print("PlaidViewModel: Received redirect notification but failed to get URL.")
             return
         }
-        print("PlaidViewModel: Handling OAuth redirect URL: \(url.absoluteString)")
+        print("PlaidViewModel: Handling OAuth redirect URL: \\(url.absoluteString)")
         // Correct way to handle OAuth redirect: Call continue(from:) on Plaid.itemCreationManager
         // This assumes itemCreationManager is a static property/method on the Plaid type.
         Plaid.itemCreationManager.continue(from: url)
@@ -84,14 +86,14 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
                         self.presentPlaidLink(handler: handler)
                         // isLoading remains true while Link is presented
                     case .failure(let error):
-                        print("PlaidViewModel: Error creating Plaid Link handler: \(error.localizedDescription)")
-                        self.errorMessage = "Failed to initialize Plaid Link. Please try again. (Error: \(error.localizedDescription))"
+                        print("PlaidViewModel: Error creating Plaid Link handler: \\(error.localizedDescription)")
+                        self.errorMessage = "Failed to initialize Plaid Link. Please try again. (Error: \\(error.localizedDescription))"
                         self.isLoading = false
                     }
 
                 case .failure(let error):
-                    print("PlaidViewModel: Error fetching link token: \(error.localizedDescription)")
-                    self.errorMessage = "Failed to fetch Plaid Link token. Please try again. (Error: \(error.localizedDescription))"
+                    print("PlaidViewModel: Error fetching link token: \\(error.localizedDescription)")
+                    self.errorMessage = "Failed to fetch Plaid Link token. Please try again. (Error: \\(error.localizedDescription))"
                     self.isLoading = false
                 }
             }
@@ -102,7 +104,7 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
     private func createLinkConfiguration(linkToken: String) -> LinkTokenConfiguration {
         var config = LinkTokenConfiguration(token: linkToken) { [weak self] success in
             // --- onSuccess Closure ---
-            print("PlaidViewModel: Plaid Link onSuccess - Public Token: \(success.publicToken)")
+            print("PlaidViewModel: Plaid Link onSuccess - Public Token: \\(success.publicToken)")
             self?.exchangePublicToken(publicToken: success.publicToken)
             // isLoading state will be handled by exchangePublicToken
             // Close the Plaid Link UI (handled automatically by LinkKit)
@@ -114,9 +116,9 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
                  guard let self = self else { return }
                  self.isLoading = false // Stop loading on exit
                  if let error = exit.error {
-                     print("PlaidViewModel: Plaid Link onExit with error: \(error.localizedDescription)")
+                     print("PlaidViewModel: Plaid Link onExit with error: \\(error.localizedDescription)")
                      // Map Plaid error codes to user-friendly messages if desired
-                     self.errorMessage = "Plaid Link exited with error: \(error.localizedDescription)"
+                     self.errorMessage = "Plaid Link exited with error: \\(error.localizedDescription)"
                  } else {
                      print("PlaidViewModel: Plaid Link exited without error (user cancelled?).")
                      // Don't necessarily show an error if the user just closed the modal
@@ -128,7 +130,7 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
 
         config.onEvent = { event in
             // --- onEvent Closure (Optional) ---
-            print("PlaidViewModel: Plaid Link onEvent: \(event.eventName.description)")
+            print("PlaidViewModel: Plaid Link onEvent: \\(event.eventName.description)")
             // Track analytics or specific UI events if needed
         }
 
@@ -170,6 +172,10 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
                 switch result {
                 case .success:
                     print("PlaidViewModel: Successfully exchanged public token via backend.")
+                    // --- Clear the spending cache to force refresh ---
+                    print("PlaidViewModel: Clearing spending cache...")
+                    self.spendingViewModel?.clearCache() // <-- Add this call
+
                     // Trigger the AuthViewModel to re-check the user's status from the backend.
                     // This will update `hasConnectedBankAccount` and cause the UI flow in GlanceApp to change.
                     self.authViewModel?.checkUserStatus()
@@ -179,8 +185,8 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
                     self.plaidLinkHandler = nil // Clear handler on success
 
                 case .failure(let error):
-                    print("PlaidViewModel: Error exchanging public token: \(error.localizedDescription)")
-                    self.errorMessage = "Failed to save bank connection. Please try again. (Error: \(error.localizedDescription))"
+                    print("PlaidViewModel: Error exchanging public token: \\(error.localizedDescription)")
+                    self.errorMessage = "Failed to save bank connection. Please try again. (Error: \\(error.localizedDescription))"
                     self.isLoading = false
                     self.plaidLinkHandler = nil // Clear handler on failure
                 }

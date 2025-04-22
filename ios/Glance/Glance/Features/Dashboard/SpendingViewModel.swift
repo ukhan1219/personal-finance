@@ -12,7 +12,7 @@ class SpendingViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     // MARK: - Cache Properties
-    private let cacheDuration: TimeInterval = 3600 // Cache for 1 hour (in seconds)
+    private let cacheDuration: TimeInterval = 300 // Cache for 1 hour (in seconds)
 
     // MARK: - Initializer
     init(apiService: APIService) {

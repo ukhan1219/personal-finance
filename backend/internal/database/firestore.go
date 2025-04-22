@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-	firebase "firebase.google.com/go/v4"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/api/iterator"
 
@@ -21,6 +20,7 @@ import (
 // PlaidItemsCollectionName defines the name of the Firestore collection used to store Plaid item data.
 // Exported constant for use in other packages like api handlers.
 const PlaidItemsCollectionName = "plaidItems"
+const glanceDatabaseID = "glance-prod" // <--- Define the target database ID
 
 // PlaidItem represents the structure of data stored for a Plaid item in Firestore.
 type PlaidItem struct {
@@ -59,24 +59,27 @@ func NewDatabaseService(client *firestore.Client, encryptionKey []byte) (*Databa
 	}, nil
 }
 
-// InitializeFirestoreClient creates and returns a Firestore client from a Firebase App instance.
+// InitializeFirestoreClient creates and returns a Firestore client using the specific project and database ID.
 //
 // Args:
 //
 //	ctx (context.Context): The context for initialization.
-//	app (*firebase.App): The initialized Firebase App instance.
+//	projectID (string): The Google Cloud Project ID.
 //
 // Returns:
 //
 //	(*firestore.Client, error): The Firestore client and an error if initialization fails.
-func InitializeFirestoreClient(ctx context.Context, app *firebase.App) (*firestore.Client, error) {
-	log.Info("Attempting to initialize Firestore client...")
-	firestoreClient, err := app.Firestore(ctx)
+func InitializeFirestoreClient(ctx context.Context, projectID string) (*firestore.Client, error) {
+	log.Infof("Attempting to initialize Firestore client for project '%s' and database '%s'...", projectID, glanceDatabaseID)
+
+	// Use the cloud.google.com/go/firestore package directly
+	firestoreClient, err := firestore.NewClientWithDatabase(ctx, projectID, glanceDatabaseID)
 	if err != nil {
-		log.Errorf("Failed to get Firestore client: %v", err)
+		log.Errorf("Failed to get Firestore client for database '%s': %v", glanceDatabaseID, err)
 		return nil, fmt.Errorf("failed to initialize Firestore client: %w", err)
 	}
-	log.Info("Firestore client initialized successfully.")
+
+	log.Infof("Firestore client for database '%s' initialized successfully.", glanceDatabaseID)
 	return firestoreClient, nil
 }
 

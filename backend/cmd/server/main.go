@@ -89,8 +89,13 @@ func main() {
 		log.Fatalf("Failed to initialize Firebase Auth client.")
 	}
 
-	// Initialize Firestore client first
-	firestoreClient, err := database.InitializeFirestoreClient(ctx, firebaseApp)
+	// Define Project ID (Ideally from config or metadata server in production)
+	projectID := "glance-prod-457519" // Replace with your actual project ID
+	log.Infof("Using Project ID: %s for Firestore", projectID)
+
+	// Initialize Firestore client first, passing the project ID
+	// Note: We no longer pass firebaseApp here, as the new func doesn't need it.
+	firestoreClient, err := database.InitializeFirestoreClient(ctx, projectID)
 	if err != nil {
 		log.Fatalf("Failed to initialize Firestore client: %v", err)
 	}
