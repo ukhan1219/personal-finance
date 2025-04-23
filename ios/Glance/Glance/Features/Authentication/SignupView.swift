@@ -62,7 +62,6 @@ struct SignupView: View {
                     print("Sign Up tapped - Email: \(email)")
                     authViewModel.signUp(email: email, pass: password)
                 }
-                .disabled(authViewModel.isLoading)
                 .padding(.bottom, 16)
 
                 // --- Display Error Messages ---

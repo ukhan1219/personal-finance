@@ -141,8 +141,8 @@ struct KeychainHelper {
              return (cachedSummary, cachedTimestamp)
          } catch {
              print("KeychainHelper: Failed to decode cached spending data or timestamp: \(error). Clearing potentially corrupt cache.")
-             // Clear potentially corrupt data
-             clearSpendingCache()
+             // Clear potentially corrupt data - explicitly ignore return value
+             _ = clearSpendingCache()
              return (nil, nil)
          }
      }

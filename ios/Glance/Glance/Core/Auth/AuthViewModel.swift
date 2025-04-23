@@ -23,9 +23,11 @@ class AuthViewModel: NSObject, ObservableObject {
     // --- NEW State for Local Biometric Lock ---
     @Published var isLocked: Bool = true
 
-    // --- NEW State for Delete Account Flow ---
-    @Published var needsReauthenticationForDelete: Bool = false // Trigger for password re-auth UI
-    @Published var reauthError: String? // Specific error message for re-auth alert
+    // MARK: - Computed Properties (New)
+    /// Returns the primary provider ID (e.g., "password", "google.com", "apple.com") or nil if no user.
+    var primaryProviderId: String? {
+        user?.providerData.first?.providerID
+    }
 
     // MARK: - Private Properties
     private var authStateHandler: AuthStateDidChangeListenerHandle?
@@ -116,8 +118,6 @@ class AuthViewModel: NSObject, ObservableObject {
                         // Also reset verification status on logout
                         self.isEmailVerified = false
                         // --- NEW: Reset delete flow state on logout ---
-                        self.needsReauthenticationForDelete = false
-                        self.reauthError = nil
                         self.isDeletingWithApple = false
                     }
                 }
@@ -203,14 +203,12 @@ class AuthViewModel: NSObject, ObservableObject {
 
     // --- Email/Password Sign Up ---
     func signUp(email: String, pass: String) {
-        isLoading = true
         errorMessage = nil
         print("Attempting to sign up with email: \(email)")
 
         Auth.auth().createUser(withEmail: email, password: pass) { [weak self] (result, error) in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.isLoading = false
 
                 if let error = error {
                     self.errorMessage = "Sign up failed: \(error.localizedDescription)"
@@ -249,14 +247,12 @@ class AuthViewModel: NSObject, ObservableObject {
 
     // --- Email/Password Sign In ---
     func signIn(email: String, pass: String) {
-        isLoading = true
         errorMessage = nil
         print("Attempting to sign in with email...")
 
         Auth.auth().signIn(withEmail: email, password: pass) { [weak self] (result, error) in
             DispatchQueue.main.async { // Ensure UI updates are on main thread
                 guard let self = self else { return }
-                self.isLoading = false // Stop loading indicator
 
                 if let error = error {
                     self.errorMessage = self.mapFirebaseError(error) // Use helper for better messages
@@ -282,7 +278,6 @@ class AuthViewModel: NSObject, ObservableObject {
             return
         }
 
-        isLoading = true
         errorMessage = nil
         passwordResetSent = false // Reset flag
         print("Attempting to send password reset email to: \(email)")
@@ -293,7 +288,6 @@ class AuthViewModel: NSObject, ObservableObject {
         Auth.auth().sendPasswordReset(withEmail: email) { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.isLoading = false
 
                 if let error = error {
                     self.errorMessage = self.mapFirebaseError(error) // Use helper for consistency
@@ -310,7 +304,6 @@ class AuthViewModel: NSObject, ObservableObject {
 
     // --- Google Sign-In Logic ---
     func signInWithGoogle() {
-        isLoading = true
         errorMessage = nil
         print("Attempting Google Sign-In...")
 
@@ -359,12 +352,10 @@ class AuthViewModel: NSObject, ObservableObject {
                 if let currentUser = Auth.auth().currentUser {
                     // User is already signed in - Link the new credential
                     print("User already signed in (\(currentUser.uid)). Attempting to link Google credential...")
-                    self.isLoading = true // Ensure loading state is active
                     self.errorMessage = nil
                     currentUser.link(with: credential) { [weak self] authResult, error in
                         guard let self = self else { return }
                         DispatchQueue.main.async {
-                             self.isLoading = false
                              if let error = error {
                                  self.handleLinkingError(error, providerName: "Google")
                              } else {
@@ -379,7 +370,6 @@ class AuthViewModel: NSObject, ObservableObject {
                     // User is not signed in - Perform sign in
                     print("Google Sign-In successful, attempting Firebase sign in...")
                     Auth.auth().signIn(with: credential) { authResult, error in
-                         self.isLoading = false // Final loading state update
                          if let error = error {
                              self.errorMessage = self.mapFirebaseError(error)
                              print("Firebase Sign in with Google credential failed: \(error.localizedDescription)")
@@ -399,7 +389,6 @@ class AuthViewModel: NSObject, ObservableObject {
 
     // Add other methods like signOut, email/password sign-in/signup later
     func signOut() {
-        isLoading = true
         errorMessage = nil
         print("Attempting to sign out...")
 
@@ -419,9 +408,6 @@ class AuthViewModel: NSObject, ObservableObject {
             print("Error signing out: %@", signOutError)
         }
         // Ensure isLoading is set to false regardless of outcome
-        DispatchQueue.main.async {
-            self.isLoading = false
-        }
     }
 
     // --- Helper Functions ---
@@ -430,7 +416,6 @@ class AuthViewModel: NSObject, ObservableObject {
     private func handleSignInError(message: String) {
          DispatchQueue.main.async {
              self.errorMessage = message
-             self.isLoading = false
              print(message) // Also print the error
          }
      }
@@ -487,7 +472,8 @@ class AuthViewModel: NSObject, ObservableObject {
 
     // MARK: - Biometric/Local Authentication
 
-    /// Sets the app to the locked state.
+    /// Sets the app to the locked state IF the user is authenticated and has a bank account connected.
+    /// Otherwise, ensures the app is unlocked.
     func lock() {
         DispatchQueue.main.async {
             print("AuthViewModel: Locking app UI.")
@@ -557,7 +543,6 @@ class AuthViewModel: NSObject, ObservableObject {
         // --- Reset deletion flag when starting normal sign-in ---
         isDeletingWithApple = false
 
-        isLoading = true // Start loading indicator
         errorMessage = nil
         print("Starting Sign in with Apple flow...")
 
@@ -695,7 +680,6 @@ class AuthViewModel: NSObject, ObservableObject {
             return
         }
 
-        isLoading = true
         errorMessage = nil
         print("Attempting to resend verification email to: \(currentUser.email ?? "N/A")")
 
@@ -704,7 +688,6 @@ class AuthViewModel: NSObject, ObservableObject {
         currentUser.sendEmailVerification { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.isLoading = false
                 if let error = error {
                     self.errorMessage = "Failed to resend verification email: \(self.mapFirebaseError(error))"
                     print("Error resending verification email: \(error.localizedDescription)")
@@ -718,32 +701,27 @@ class AuthViewModel: NSObject, ObservableObject {
 
     // MARK: - Delete Account Flow
 
-    /// Initiates the account deletion process.
     /// Checks the provider and triggers the appropriate re-authentication flow.
     func initiateDeleteAccountFlow() {
-        guard let currentUser = Auth.auth().currentUser else {
+        // Ensure user is signed in
+        guard Auth.auth().currentUser != nil else {
             errorMessage = "Cannot delete account: Not signed in."
             return
         }
 
         errorMessage = nil
-        reauthError = nil
-        needsReauthenticationForDelete = false
 
         // Determine the sign-in provider
-        let providerId = currentUser.providerData.first?.providerID ?? ""
+        let providerId = Auth.auth().currentUser?.providerData.first?.providerID ?? ""
         print("Initiating delete account flow for provider: \(providerId)")
 
         if providerId == "apple.com" {
-            // Start Apple re-authentication flow
+            // Start Apple re-authentication flow first
+            // The completion handler will then trigger biometric check
             startAppleReauthForDelete()
         } else if providerId == "password" || providerId == "google.com" {
-            // Require password re-authentication for email/password or Google users
-            // (Google users might not have a password set up if only ever used Google Sign In,
-            // but Firebase requires re-auth with *some* credential. Password is the most common.)
-            // We will prompt for password in the UI.
-            needsReauthenticationForDelete = true
-            print("Needs password re-authentication for deletion.")
+            // For Password or Google users, directly request biometric/passcode re-auth
+            requestBiometricReauthThenDelete()
         } else {
             // Handle unexpected provider (or link multiple providers later)
             errorMessage = "Account deletion not supported for this sign-in method yet."
@@ -752,6 +730,7 @@ class AuthViewModel: NSObject, ObservableObject {
     }
 
     /// Starts the Apple Sign In flow specifically for re-authentication before deletion.
+    /// The delegate method will handle the result and trigger the biometric check.
     @available(iOS 13.0, *)
     private func startAppleReauthForDelete() {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -760,7 +739,6 @@ class AuthViewModel: NSObject, ObservableObject {
             return
         }
 
-        isLoading = true
         errorMessage = nil
         isDeletingWithApple = true // Set the flag for the delegate
         print("Starting Apple Sign In flow for DELETION...")
@@ -779,69 +757,160 @@ class AuthViewModel: NSObject, ObservableObject {
         authorizationController.performRequests()
     }
 
-    /// Re-authenticates the user with a password credential and then deletes the account.
-    /// Call this from the UI after collecting the password.
-    func reauthenticateAndDeleteWithPassword(_ password: String) {
-        guard let currentUser = Auth.auth().currentUser, let email = currentUser.email else {
-            reauthError = "Could not re-authenticate: User or email not found."
+    /// Presents a biometric/passcode prompt for re-authentication.
+    /// If successful, proceeds to delete the account.
+    private func requestBiometricReauthThenDelete() {
+        guard Auth.auth().currentUser != nil else {
+            self.errorMessage = "Cannot delete account: User not found."
+            return
+        }
+        guard UIApplication.shared.applicationState == .active else {
+            print("AuthViewModel: requestBiometricReauthThenDelete called but application state is not active. Aborting.")
+            self.errorMessage = "Could not verify identity. Please try again when the app is active."
             return
         }
 
-        isLoading = true
-        reauthError = nil // Clear previous reauth error
-        errorMessage = nil
-        print("Attempting to re-authenticate user \(email) with password for deletion...")
+        let context = LAContext()
+        var error: NSError?
+        let reason = "Please authenticate to confirm account deletion."
 
-        let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+        // Check if device is capable of biometric/passcode authentication
+        if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) {
+            print("AuthViewModel: Requesting biometric/passcode auth for deletion...")
+            errorMessage = nil
 
-        currentUser.reauthenticate(with: credential) { [weak self] authResult, error in
-            // Still on main thread
-            guard let self = self else { return }
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { [weak self] success, authenticationError in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
 
-            if let error = error {
-                print("Re-authentication failed: \(error.localizedDescription)")
-                self.reauthError = "Re-authentication failed: \(self.mapFirebaseError(error))"
-                self.isLoading = false
-                return
+                    if success {
+                        print("AuthViewModel: Biometric/passcode re-authentication SUCCESSFUL for deletion.")
+                        // Proceed with the actual deletion logic
+                        self.deleteCurrentUserAccount()
+                    } else {
+                        // Handle authentication failure
+                        print("AuthViewModel: Biometric/passcode re-authentication FAILED for deletion.")
+                        if let authError = authenticationError as? LAError {
+                            print("    -> LAError code: \(authError.code.rawValue) - \(authError.localizedDescription)")
+                            // Provide more specific feedback based on the error
+                            switch authError.code {
+                            case .userCancel:
+                                self.errorMessage = "Account deletion cancelled."
+                            case .authenticationFailed:
+                                self.errorMessage = "Authentication failed. Please try again."
+                            case .userFallback:
+                                self.errorMessage = "Passcode authentication required." // Or guide them if fallback isn't desired/possible
+                            default:
+                                self.errorMessage = "Could not verify identity. \(authError.localizedDescription)"
+                            }
+                        } else {
+                            print("    -> Unknown authentication error: \(authenticationError?.localizedDescription ?? "N/A")")
+                            self.errorMessage = "An unknown error occurred during authentication."
+                        }
+                        // Reset Apple deletion flag if it was set
+                        self.isDeletingWithApple = false
+                    }
+                }
             }
-
-            // Re-authentication successful, proceed with deletion
-            print("Re-authentication successful. Deleting account...")
-            self.deleteCurrentUserAccount() // Call helper to perform actual deletion
+        } else {
+            // Device cannot use biometric/passcode authentication
+            print("AuthViewModel: Device NOT capable of biometric/passcode auth for deletion.")
+            let errorCode = error?.code ?? 0
+            let errorDesc = error?.localizedDescription ?? "Not specified"
+            print("    -> LAContext Error Code: \(errorCode) - \(errorDesc)")
+            self.errorMessage = "Device security (Face ID, Touch ID, or Passcode) is required for account deletion. Please enable it in your device settings."
+            // Reset Apple deletion flag if it was set
+            self.isDeletingWithApple = false
         }
     }
 
-    /// Performs the actual user account deletion after successful re-authentication.
+    /// Performs the actual user account deletion after successful re-authentication (biometric or Apple).
+    /// For Apple users, this also handles token revocation BEFORE deleting.
     private func deleteCurrentUserAccount() {
         guard let currentUser = Auth.auth().currentUser else {
             errorMessage = "Could not delete account: User not found after re-authentication."
-            isLoading = false
+            isDeletingWithApple = false // Ensure flag is reset
             return
         }
 
+        let providerId = currentUser.providerData.first?.providerID ?? ""
+        print("Attempting deletion for provider: \(providerId)...")
+
         // Ensure loading state is true before deletion
-        isLoading = true
+        errorMessage = nil
 
-        currentUser.delete { [weak self] error in
-            DispatchQueue.main.async { // Ensure UI updates are on main thread
-                guard let self = self else { return }
-                self.isLoading = false
-                // Reset flags regardless of outcome
-                self.needsReauthenticationForDelete = false
-                self.isDeletingWithApple = false
-                self.reauthError = nil
+        Task { // Use Task for async operations (token revocation)
+            do {
+                // --- Step 1: Revoke Apple Token (if applicable) ---
+                if providerId == "apple.com" {
+                    // We need the authorization code obtained during Apple re-auth.
+                    // This logic is now *MOVED* inside the ASAuthorizationControllerDelegate completion.
+                    // We assume here that if providerId is apple.com, the revokeToken call happened *before* this function was called.
+                    // **Correction**: The revoke token needs to happen HERE, using the auth code we got earlier.
+                    // We need to store the auth code temporarily when Apple re-auth succeeds.
+                    // Let's rethink the flow slightly.
 
-                if let error = error {
-                    print("Account deletion failed: \(error.localizedDescription)")
-                    self.errorMessage = "Failed to delete account: \(self.mapFirebaseError(error))"
-                } else {
-                    print("Account deleted successfully.")
-                    self.errorMessage = nil // Clear any previous errors
-                    // The authStateHandler should automatically handle the sign-out state change
+                    // --- Revised Flow ---
+                    // 1. initiateDeleteAccountFlow (Apple): Calls startAppleReauthForDelete
+                    // 2. startAppleReauthForDelete: Sets isDeletingWithApple=true, starts Apple UI.
+                    // 3. authorizationController(didCompleteWithAuthorization):
+                    //    - Gets Apple credential and auth code.
+                    //    - *Stores the auth code temporarily*.
+                    //    - Calls requestBiometricReauthThenDelete().
+                    // 4. requestBiometricReauthThenDelete:
+                    //    - Prompts for biometrics.
+                    //    - On success, calls deleteCurrentUserAccount().
+                    // 5. deleteCurrentUserAccount:
+                    //    - Checks provider. If Apple:
+                    //        - Retrieves the stored auth code.
+                    //        - Calls Auth.auth().revokeToken().
+                    //        - Calls currentUser.delete().
+                    //    - If not Apple:
+                    //        - Calls currentUser.delete().
+
+                    // We need a temporary place to store the auth code.
+                    // Let's add a private property for this.
+                    guard let authCode = self.appleAuthCodeForDeletion else {
+                         print("Error: Apple user deletion attempted, but authorization code missing.")
+                         throw APIError.unknown(NSError(domain: "AuthViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing Apple authorization code for deletion."]))
+                    }
+                    print("Revoking Apple token...")
+                    try await Auth.auth().revokeToken(withAuthorizationCode: authCode)
+                    print("Apple token revoked successfully.")
+                    self.appleAuthCodeForDeletion = nil // Clear the stored code
+                }
+
+                // --- Step 2: Delete Firebase User ---
+                print("Deleting Firebase user account...")
+                try await currentUser.delete()
+                print("Firebase user account deleted successfully.")
+
+                // --- Step 3: Update UI (on Main Actor) ---
+                await MainActor.run {
+                    self.isDeletingWithApple = false
+                    self.errorMessage = nil
+                    // Auth state listener will handle setting user to nil, isAuthenticated to false etc.
+                    // Explicitly clear cache associated with the user
+                    // Ignore the return value as deletion is proceeding regardless
+                    _ = KeychainHelper.clearSpendingCache() // Clear spending cache on delete
+                    self.userDefaults.removeObject(forKey: self.userDefaultsStatusKey) // Clear status cache
+                    print("User deletion complete. Caches cleared.")
+                }
+
+            } catch {
+                // --- Step 4: Handle Errors (on Main Actor) ---
+                print("Error during account deletion process: \(error.localizedDescription)")
+                await MainActor.run {
+                     self.isDeletingWithApple = false
+                     self.appleAuthCodeForDeletion = nil // Clear code on error too
+                     self.errorMessage = "Failed to delete account: \(self.mapFirebaseError(error))"
                 }
             }
         }
     }
+
+    // --- NEW Private Property to hold Apple auth code during deletion ---
+    private var appleAuthCodeForDeletion: String?
 
 }
 
@@ -856,7 +925,7 @@ extension AuthViewModel: ASAuthorizationControllerDelegate {
             print("Error: Could not cast authorization credential to ASAuthorizationAppleIDCredential.")
             // If deleting, use general errorMessage
             handleSignInError(message: "Apple Sign In completed but credential format was unexpected.")
-            if isDeletingWithApple { isDeletingWithApple = false; isLoading = false } // Reset state
+            if isDeletingWithApple { isDeletingWithApple = false }
             return
         }
 
@@ -868,14 +937,14 @@ extension AuthViewModel: ASAuthorizationControllerDelegate {
         guard let appleIDToken = appleIDCredential.identityToken else {
             print("Error: Unable to fetch identity token from Apple credential.")
             handleSignInError(message: "Could not get identity token from Apple.")
-            if isDeletingWithApple { isDeletingWithApple = false; isLoading = false } // Reset state
+            if isDeletingWithApple { isDeletingWithApple = false }
             return
         }
 
         guard let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
             print("Error: Unable to serialize identity token string from data.")
             handleSignInError(message: "Could not process identity token from Apple.")
-            if isDeletingWithApple { isDeletingWithApple = false; isLoading = false } // Reset state
+            if isDeletingWithApple { isDeletingWithApple = false }
             return
         }
 
@@ -886,47 +955,33 @@ extension AuthViewModel: ASAuthorizationControllerDelegate {
         // --- Check if this completion is for DELETION or standard SIGN IN/LINK ---
         if isDeletingWithApple {
             print("Apple authorization completed in DELETION context.")
-            // --- Handle Apple Re-authentication & Deletion ---
+            // --- Handle Apple Re-authentication ---
+            // Get the authorization code needed for token revocation later
             guard let appleAuthCode = appleIDCredential.authorizationCode,
                   let authCodeString = String(data: appleAuthCode, encoding: .utf8) else {
                 print("Error: Unable to fetch authorization code from Apple credential for deletion.")
                 errorMessage = "Could not verify Apple session for deletion."
                 isDeletingWithApple = false
-                isLoading = false
                 return
             }
 
-            // Perform token revocation and deletion in a background Task
-            Task {
-                do {
-                    print("Revoking Apple token...")
-                    try await Auth.auth().revokeToken(withAuthorizationCode: authCodeString)
-                    print("Apple token revoked successfully. Deleting account...")
-                    // Now delete the user
-                    await MainActor.run { // Ensure UI updates happen on main thread
-                         self.deleteCurrentUserAccount() // Call the shared delete helper
-                    }
-                } catch {
-                    print("Error revoking Apple token or deleting account: \(error.localizedDescription)")
-                    await MainActor.run { // Ensure UI updates happen on main thread
-                         self.errorMessage = "Failed to complete account deletion after Apple verification: \(self.mapFirebaseError(error))"
-                         self.isDeletingWithApple = false
-                         self.isLoading = false
-                    }
-                }
-            }
+            // --- Store the authorization code ---
+            self.appleAuthCodeForDeletion = authCodeString
+            print("Stored Apple auth code for deletion.")
+
+            // --- NOW, trigger the biometric check ---
+            // Don't stop loading here, the biometric prompt will show loading
+            requestBiometricReauthThenDelete()
 
         } else {
             // --- Handle Standard Sign In / Link --- (Existing Logic)
             if let currentUser = Auth.auth().currentUser {
                 // --- User is already signed in - Link the new credential ---
                 print("User already signed in (\(currentUser.uid)). Attempting to link Apple credential...")
-                self.isLoading = true
                 self.errorMessage = nil
                 currentUser.link(with: credential) { [weak self] authResult, error in
                     guard let self = self else { return }
                     DispatchQueue.main.async {
-                         self.isLoading = false
                          if let error = error {
                              self.handleLinkingError(error, providerName: "Apple")
                          } else {
@@ -943,7 +998,6 @@ extension AuthViewModel: ASAuthorizationControllerDelegate {
                 Auth.auth().signIn(with: credential) { [weak self] (authResult, error) in
                     guard let self = self else { return }
                     DispatchQueue.main.async {
-                        self.isLoading = false
                         if let error = error {
                             self.errorMessage = self.mapFirebaseError(error)
                             print("Firebase Sign in with Apple credential failed: \(error.localizedDescription)")
@@ -965,7 +1019,12 @@ extension AuthViewModel: ASAuthorizationControllerDelegate {
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         // --- Check if this error occurred during DELETION context ---
         let wasDeleting = isDeletingWithApple
-        if wasDeleting { isDeletingWithApple = false } // Reset flag immediately
+        // Reset flag and potentially stored code immediately on any error in the Apple flow
+        if wasDeleting {
+            isDeletingWithApple = false
+            appleAuthCodeForDeletion = nil
+            print("Apple Sign In error occurred during deletion context. Resetting state.")
+        }
 
         // Handle errors from the ASAuthorizationController flow itself (e.g., user cancellation)
         let finalErrorMessage: String
@@ -973,8 +1032,6 @@ extension AuthViewModel: ASAuthorizationControllerDelegate {
             finalErrorMessage = "Apple Sign In was cancelled."
             print(finalErrorMessage)
             DispatchQueue.main.async {
-                 self.isLoading = false // Stop loading on cancellation
-                 // Don't show cancellation as a persistent error unless deleting
                  if !wasDeleting {
                      self.errorMessage = nil
                  } else {
@@ -988,7 +1045,6 @@ extension AuthViewModel: ASAuthorizationControllerDelegate {
             // Use helper to set state, adapting message if deleting
             DispatchQueue.main.async {
                  self.errorMessage = wasDeleting ? "Apple verification failed for deletion: \(error.localizedDescription)" : finalErrorMessage
-                 self.isLoading = false
             }
         }
          // Reset the nonce if the flow failed or was cancelled

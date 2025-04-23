@@ -8,7 +8,6 @@ class SpendingViewModel: ObservableObject {
 
     // MARK: - Published State Properties
     @Published var spendingSummary: SpendingSummary? = nil
-    @Published var isLoading: Bool = false
     @Published var errorMessage: String?
 
     // MARK: - Cache Properties
@@ -69,19 +68,12 @@ class SpendingViewModel: ObservableObject {
 
     /// Fetches spending data from the backend API.
     private func fetchSpendingDataFromServer() {
-        guard !isLoading else { // Prevent concurrent fetches
-            print("SpendingViewModel: Already fetching data.")
-            return
-        }
-
         print("SpendingViewModel: Starting network fetch...")
-        isLoading = true
         errorMessage = nil
 
         apiService.fetchSpendingData { [weak self] result in
             DispatchQueue.main.async { // Ensure UI updates on main thread
                 guard let self = self else { return }
-                self.isLoading = false
 
                 switch result {
                 case .success(let summary):
@@ -119,12 +111,9 @@ class SpendingViewModel: ObservableObject {
     }
 
     /// Removes spending data cache from Keychain.
-    private func clearCache() {
-        if KeychainHelper.clearSpendingCache() {
-             print("SpendingViewModel: Cleared spending data Keychain cache.")
-         } else {
-             print("SpendingViewModel: Failed to clear spending data Keychain cache.")
-         }
+    func clearCache() {
+        _ = KeychainHelper.clearSpendingCache() // Explicitly ignore result
+        print("SpendingViewModel: Attempted to clear spending data Keychain cache.") // Keep a log
     }
 }
 

@@ -46,7 +46,7 @@ struct EmailVerificationView: View {
                     SecondaryButton(title: "Resend Verification Email") {
                         resendVerificationEmail()
                     }
-                    .disabled(recentlyResent || authViewModel.isLoading) // Disable if loading or recently resent
+                    .disabled(recentlyResent) // Disable if loading or recently resent -- REMOVED isLoading check
                 }
                 .padding(.bottom, 24)
 

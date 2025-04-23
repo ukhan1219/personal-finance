@@ -76,7 +76,8 @@ struct GlanceApp: App {
             // Use a Group to manage the view hierarchy based on auth and status
             Group {
                 // --- NEW: Locked State Check --- Handle this FIRST
-                if authViewModel.isAuthenticated && authViewModel.isLocked {
+                // Show lock screen only if authenticated, bank connected, AND locked
+                if authViewModel.isAuthenticated && authViewModel.hasConnectedBankAccount && authViewModel.isLocked {
                     LockedView()
                          .transition(.opacity) // Optional: Add a subtle transition
                 } else if !authViewModel.isAuthenticated {
@@ -87,26 +88,24 @@ struct GlanceApp: App {
                     // Check providerID to ensure only email/password users see this.
                     // Apple/Google users skip this step.
                     EmailVerificationView()
-                } else if authViewModel.isCheckingStatus {
-                    // --- Checking Plaid Status ---
-                    // TODO: Replace with a nicer LoadingView
-                    ProgressView("Checking account status...")
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.appBackground.ignoresSafeArea())
-                } else if !authViewModel.hasConnectedBankAccount {
-                    // --- Logged In, Needs Plaid Connection ---
-                    PlaidConnectView()
-                        .environmentObject(plaidViewModel)
                 } else {
-                    // --- Logged In, Plaid Connected, Email Verified (if applicable) --- Show Main App UI
-                    // Wrap SpendingView and SettingsView in a TabView for swipe navigation
+                    // --- Logged In, Email Verified (if needed) --- Show Main App UI (with conditional first tab)
+                    // Wrap main views in a TabView for swipe navigation
                     TabView {
-                        SpendingView()
-                            // Provide SpendingViewModel to the SpendingView
-                            .environmentObject(spendingViewModel)
-                            .tag(0) // Assign a tag for potential programmatic navigation (optional)
+                        // --- CONDITIONAL FIRST TAB ---
+                        if !authViewModel.hasConnectedBankAccount {
+                             // --- Logged In, Needs Plaid Connection ---
+                             PlaidConnectView()
+                                 // EnvironmentObject for PlaidViewModel is already applied below
+                                 .tag(0) // Assign a tag
+                        } else {
+                            // --- Logged In, Plaid Connected --- Show Spending View
+                            SpendingView()
+                                // EnvironmentObject for SpendingViewModel is already applied below
+                                .tag(0) // Assign the same tag
+                        }
 
+                        // --- Settings View (Always the second tab) ---
                         SettingsView()
                             .tag(1) // Assign a tag
 
@@ -120,6 +119,7 @@ struct GlanceApp: App {
             // Provide AuthViewModel to all views that might need it
             .environmentObject(authViewModel)
             // --- Provide PlaidViewModel and SpendingViewModel --- Needed by subviews
+            // These are available to PlaidConnectView, SpendingView, and SettingsView as needed
             .environmentObject(plaidViewModel)
             .environmentObject(spendingViewModel)
             // Provide apiService if needed directly (less common)
@@ -127,43 +127,61 @@ struct GlanceApp: App {
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
              if newPhase == .inactive || newPhase == .background {
-                  // Lock the app when going to background if authenticated
-                  if authViewModel.isAuthenticated {
-                      print("GlanceApp: Scene inactive/background. Locking app.")
+                  // Lock the app when going to background ONLY if authenticated AND bank connected
+                  if authViewModel.isAuthenticated && authViewModel.hasConnectedBankAccount {
+                      print("GlanceApp: Scene inactive/background. Locking app (authenticated + bank connected).")
                       authViewModel.lock()
+                  } else {
+                      print("GlanceApp: Scene inactive/background. Not locking (not authenticated or bank not connected).")
                   }
              } else if newPhase == .active {
-                 // Reload user data when the app becomes active,
-                 // especially important for picking up email verification status
-                 // after the user clicks the link in their email app.
+                 // --- Handle App Activation ---
                  if authViewModel.isAuthenticated {
-                      print("GlanceApp: App became active, user authenticated. Reloading user data.")
-                      authViewModel.reloadUser() // Ensure latest user state
+                     // If user is authenticated when app becomes active...
+                     print("GlanceApp: App became active, user authenticated. Reloading user data.")
+                     authViewModel.reloadUser() // Ensure latest user state (incl. verification)
 
-                      // Request unlock *after* confirming auth state
-                      print("GlanceApp: Requesting biometric unlock.")
-                      // Only request unlock if currently locked
-                      if authViewModel.isLocked {
-                          authViewModel.requestBiometricUnlock()
-                      } else {
-                           print("GlanceApp: App already unlocked.")
-                           // If already unlocked, trigger data refresh immediately
-                           spendingViewModel.refreshSpendingDataIfNeeded()
-                      }
+                     // Check if bank account is connected
+                     if authViewModel.hasConnectedBankAccount {
+                          print("GlanceApp: Bank account IS connected.")
+                          // Request unlock *after* confirming auth state
+                          print("GlanceApp: Requesting biometric unlock.")
+                          // Only request unlock if currently locked
+                          if authViewModel.isLocked {
+                              authViewModel.requestBiometricUnlock()
+                          } else {
+                               print("GlanceApp: App already unlocked.")
+                               // If already unlocked, trigger data refresh immediately
+                               spendingViewModel.refreshSpendingDataIfNeeded()
+                          }
+                     } else {
+                         // Authenticated, but NO bank account connected yet
+                         print("GlanceApp: Bank account IS NOT connected.")
+                         // Ensure the app is NOT locked in this state
+                         DispatchQueue.main.async { // Ensure state update happens on main thread
+                             authViewModel.isLocked = false
+                         }
+                         print("GlanceApp: Ensured app is unlocked (no bank account).")
+                         // No spending data to refresh here yet.
+                     }
+
                  } else {
                       print("GlanceApp: App became active, user NOT authenticated.")
                       // Ensure app is locked if user is not authenticated when coming to foreground
-                      // (Safety measure, should normally be handled by signOut)                     
+                      // (Safety measure, should normally be handled by signOut)
+                      // Calling lock() is safe as it will internally check auth/bank status
                       authViewModel.lock()
                  }
              }
          }
          // --- NEW: Trigger data refresh *after* unlock ---
          .onChange(of: authViewModel.isLocked) { wasLocked, isNowLocked in
-              // If the app is authenticated AND just became unlocked
-              if authViewModel.isAuthenticated && !isNowLocked {
-                   print("GlanceApp: App unlocked via isLocked change. Refreshing spending data if needed.")
+              // If the app is authenticated, bank connected, AND just became unlocked
+              if authViewModel.isAuthenticated && authViewModel.hasConnectedBankAccount && !isNowLocked {
+                   print("GlanceApp: App unlocked via isLocked change (with bank connected). Refreshing spending data if needed.")
                    spendingViewModel.refreshSpendingDataIfNeeded()
+              } else if !isNowLocked {
+                   print("GlanceApp: App unlocked via isLocked change (but not authenticated or no bank connected). No data refresh triggered.")
               }
          }
     }

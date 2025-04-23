@@ -10,7 +10,6 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
     private weak var spendingViewModel: SpendingViewModel? // <-- Add weak reference
 
     // MARK: - Published State Properties
-    @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     // Note: We don't publish linkSuccess directly. Instead, we trigger authViewModel.checkUserStatus()
     // on success, and the main app flow reacts to changes in authViewModel.hasConnectedBankAccount.
@@ -65,7 +64,6 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
     /// creates a handler, and opens the Plaid Link UI.
     func openPlaidLink() {
         print("PlaidViewModel: Starting Plaid Link flow...")
-        self.isLoading = true
         self.errorMessage = nil
 
         apiService.createLinkToken { [weak self] result in
@@ -85,16 +83,14 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
                         self.plaidLinkHandler = handler
                         self.presentPlaidLink(handler: handler)
                         // isLoading remains true while Link is presented
-                    case .failure(let error):
-                        print("PlaidViewModel: Error creating Plaid Link handler: \\(error.localizedDescription)")
-                        self.errorMessage = "Failed to initialize Plaid Link. Please try again. (Error: \\(error.localizedDescription))"
-                        self.isLoading = false
+                    case .failure( _):
+                        print("PlaidViewModel: Error creating Plaid Link handler.")
+                        self.errorMessage = "Failed to initialize Plaid Link. Please try again."
                     }
 
-                case .failure(let error):
-                    print("PlaidViewModel: Error fetching link token: \\(error.localizedDescription)")
-                    self.errorMessage = "Failed to fetch Plaid Link token. Please try again. (Error: \\(error.localizedDescription))"
-                    self.isLoading = false
+                case .failure( _):
+                    print("PlaidViewModel: Error fetching link token.")
+                    self.errorMessage = "Failed to fetch Plaid Link token. Please try again."
                 }
             }
         }
@@ -114,11 +110,10 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
             // --- onExit Closure ---
             DispatchQueue.main.async { // Ensure UI updates on main thread
                  guard let self = self else { return }
-                 self.isLoading = false // Stop loading on exit
-                 if let error = exit.error {
-                     print("PlaidViewModel: Plaid Link onExit with error: \\(error.localizedDescription)")
-                     // Map Plaid error codes to user-friendly messages if desired
-                     self.errorMessage = "Plaid Link exited with error: \\(error.localizedDescription)"
+                 if exit.error != nil {
+                     let exitError = exit.error!
+                     print("PlaidViewModel: Plaid Link onExit with error: \\(exitError.localizedDescription)")
+                     self.errorMessage = "Plaid Link exited with error: \(exitError.localizedDescription)"
                  } else {
                      print("PlaidViewModel: Plaid Link exited without error (user cancelled?).")
                      // Don't necessarily show an error if the user just closed the modal
@@ -145,7 +140,6 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
                let rootViewController = windowScene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
              print("PlaidViewModel: Error - Could not find root view controller to present Plaid Link.")
              self.errorMessage = "Could not display Plaid Link interface."
-             self.isLoading = false
              self.plaidLinkHandler = nil // Clear handler if presentation fails
              return
          }
@@ -161,8 +155,6 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
     /// Exchanges the public token received from Plaid Link for an access token via the backend.
     private func exchangePublicToken(publicToken: String) {
         print("PlaidViewModel: Exchanging public token...")
-        // Keep isLoading true or manage a separate state if needed
-        self.isLoading = true
         self.errorMessage = nil // Clear previous errors
 
         apiService.exchangePublicToken(publicToken: publicToken) { [weak self] result in
@@ -181,13 +173,11 @@ class PlaidViewModel: NSObject, ObservableObject { // Inherit from NSObject for 
                     self.authViewModel?.checkUserStatus()
                     // Let the checkUserStatus manage the final isLoading state in AuthViewModel
                     // We can set our own isLoading to false here, as the exchange is done.
-                    self.isLoading = false
                     self.plaidLinkHandler = nil // Clear handler on success
 
-                case .failure(let error):
-                    print("PlaidViewModel: Error exchanging public token: \\(error.localizedDescription)")
-                    self.errorMessage = "Failed to save bank connection. Please try again. (Error: \\(error.localizedDescription))"
-                    self.isLoading = false
+                case .failure( _):
+                    print("PlaidViewModel: Error exchanging public token.")
+                    self.errorMessage = "Failed to save bank connection. Please try again."
                     self.plaidLinkHandler = nil // Clear handler on failure
                 }
             }

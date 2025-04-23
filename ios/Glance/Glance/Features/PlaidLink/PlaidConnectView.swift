@@ -27,14 +27,11 @@ struct PlaidConnectView: View {
                 }
                 .padding(.bottom, 32)
 
-                // --- Loading Indicator --- (Shown while PlaidVM is loading)
-                
-                    // --- Connect Button --- (Shown when not loading)
-                    PrimaryButton(title: "", iconName: "plaid-logo") {
-                        connectBankAccountAction()
-                    }
-                    .padding(.bottom, 16)
-
+                // --- Connect Button --- (Always shown now)
+                PrimaryButton(title: "", iconName: "plaid-logo") {
+                    connectBankAccountAction()
+                }
+                .padding(.bottom, 16)
 
                 // --- Error Message Display --- (Shown if PlaidVM has an error)
                 if let errorMessage = plaidViewModel.errorMessage {
@@ -71,8 +68,14 @@ struct PlaidConnectView_Previews: PreviewProvider {
         // Create mock AuthViewModel and APIService for PlaidViewModel dependency
         let mockAuthViewModel = AuthViewModel()
         let mockAPIService = APIService(authViewModel: mockAuthViewModel)
-        // Create mock PlaidViewModel
-        let mockPlaidViewModel = PlaidViewModel(apiService: mockAPIService, authViewModel: mockAuthViewModel)
+        // Inject mock APIService into AuthViewModel (if it has the setup method)
+        // mockAuthViewModel.setupAPIService(apiService: mockAPIService) // Uncomment if needed
+
+        // --- NEW: Create mock SpendingViewModel ---
+        let mockSpendingViewModel = SpendingViewModel(apiService: mockAPIService)
+
+        // Create mock PlaidViewModel, now including SpendingViewModel
+        let mockPlaidViewModel = PlaidViewModel(apiService: mockAPIService, authViewModel: mockAuthViewModel, spendingViewModel: mockSpendingViewModel)
 
         // Example states for preview:
         // mockPlaidViewModel.isLoading = true

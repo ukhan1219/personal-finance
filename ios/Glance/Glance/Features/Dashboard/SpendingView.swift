@@ -16,18 +16,7 @@ struct SpendingView: View {
 
             VStack(alignment: .leading) {
                 // --- Spending Display ---
-                if viewModel.isLoading && viewModel.spendingSummary == nil {
-                    // Initial loading state
-                    VStack {
-                         ProgressView()
-                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                         Text("Loading Spending...")
-                             .font(.custom("Manrope-Bold", size: 14)) // Use Manrope
-                             .foregroundColor(.secondaryText)
-                             .padding(.top, 8)
-                     }
-                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let summary = viewModel.spendingSummary {
+                if let summary = viewModel.spendingSummary {
                     // Data available state
                     VStack(alignment: .leading, spacing: 8) { // Adjust spacing as needed
                         SpendingRow(amount: summary.month, label: "m", opacity: 1.0, labelGray: labelGray)
@@ -40,16 +29,7 @@ struct SpendingView: View {
                     Spacer() // Push content to the top
 
                     // --- Error/Refresh Indicator ---
-                     if viewModel.isLoading {
-                         // Subtle refresh indicator when loading in background
-                         HStack {
-                             Spacer()
-                             ProgressView()
-                                 .progressViewStyle(CircularProgressViewStyle(tint: .gray))
-                                 .scaleEffect(0.8)
-                             Spacer()
-                         }.padding(.bottom)
-                     } else if let error = viewModel.errorMessage {
+                     if let error = viewModel.errorMessage {
                          Text(error)
                              .font(.custom("Manrope-Bold", size: 12)) // Use Manrope
                              .foregroundColor(.red)
@@ -78,11 +58,15 @@ struct SpendingView: View {
                      }.padding()
                 } else {
                      // Fallback for unexpected state (shouldn't normally happen)
-                     Text("No spending data available.")
-                        .font(.custom("Manrope-Bold", size: 14)) // Use Manrope
-                        .foregroundColor(.secondaryText)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                     // Display $0 values initially instead of "No data"
+                    VStack(alignment: .leading, spacing: 8) { 
+                        SpendingRow(amount: 0, label: "m", opacity: 1.0, labelGray: labelGray)
+                        SpendingRow(amount: 0, label: "w", opacity: 0.666, labelGray: labelGray)
+                        SpendingRow(amount: 0, label: "d", opacity: 0.333, labelGray: labelGray)
+                    }
+                    .padding(.top, 40)
+                    .padding(.leading, 24)
+                 }
             }
         }
     }

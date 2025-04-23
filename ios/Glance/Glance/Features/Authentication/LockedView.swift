@@ -10,10 +10,16 @@ struct LockedView: View {
             VStack(spacing: 24) {
                 Spacer()
 
-                // Icon indicating lock/biometrics
-                Image(systemName: "lock.shield.fill") // Or "faceid", "touchid"
-                    .font(.system(size: 60))
-                    .foregroundStyle(GradientConstants.titleGradient)
+                // Icon indicating lock/biometrics - Now wrapped in a Button
+                Button {
+                    print("LockedView: Lock icon tapped. Requesting biometric unlock.")
+                    authViewModel.requestBiometricUnlock()
+                } label: {
+                    Image(systemName: "lock.shield.fill") // Or "faceid", "touchid"
+                        .font(.system(size: 60))
+                        .foregroundStyle(GradientConstants.titleGradient)
+                }
+                .buttonStyle(.plain) // Use plain style to keep icon appearance
 
                 Text("Glance is Locked")
                             .font(.custom("Onest-Bold", size: 32))
