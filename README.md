@@ -11,15 +11,13 @@ Glance is a beautifully simple iOS application designed to give you an at-a-glan
 
 Here is a glimpse of the user experience, from authentication to viewing your spending data.
 
-*(Please replace these placeholders with your actual screenshots)*
-
 | Login Screen | Spending Dashboard |
 | :---: | :---: |
-| `![Login Screen](link_to_your_login_image.png)` | `![Dashboard Screen](link_to_your_dashboard_image.png)` |
+| <img src="public/IMG_3950.PNG" width="300"> | <img src="public/IMG_3951.PNG" width="300"> |
 
 | Account Linking |
 | :---: |
-| `![Plaid Linking Screen](link_to_your_plaid_image.png)` |
+| <img src="public/IMG_3952.PNG" width="300"> |
 
 ## 🚀 Project Purpose & Motivation
 
