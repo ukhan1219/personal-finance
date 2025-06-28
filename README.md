@@ -13,11 +13,11 @@ Here is a glimpse of the user experience, from authentication to viewing your sp
 
 | Login Screen | Spending Dashboard |
 | :---: | :---: |
-| <img src="public/IMG_3950.PNG" width="300"> | <img src="public/IMG_3951.PNG" width="300"> |
+| <img src="public/IMG_3952.PNG" width="300"> | <img src="public/IMG_3951.PNG" width="300"> |
 
 | Account Linking |
 | :---: |
-| <img src="public/IMG_3952.PNG" width="300"> |
+| <img src="public/IMG_3954.PNG" width="300"> |
 
 ## 🚀 Project Purpose & Motivation
 
