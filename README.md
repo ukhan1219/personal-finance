@@ -21,7 +21,7 @@ Here is a glimpse of the user experience, from authentication to viewing your sp
 
 ## 🚀 Project Purpose & Motivation
 
-Glance started as a solo hackathon project and has since evolved into a passion project and a powerful portfolio piece. The primary motivation was twofold:
+Glance started as a solo hackathon project (the original T3 stack version can be viewed [here](https://github.com/ukhan1219/glance)) and has since been completely rewritten and evolved into a passion project and a powerful portfolio piece. The primary motivation was twofold:
 
 1.  **To Build a Real-World Application:** I wanted to take an idea from concept to a fully deployed iOS app that my friends and I could use. Today, Glance serves over 100 concurrent users, providing real value and a testbed for continuous improvement.
 2.  **To Master New Technologies:** This project was a deliberate learning exercise to dive deep into unfamiliar technologies. It was an opportunity to challenge my skills in **SwiftUI** by creating a beautiful, simple, and intuitive user interface, and to build a robust, secure, and scalable backend using **Go**.
